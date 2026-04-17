@@ -1,0 +1,378 @@
+app_name: Quokka
+version: 0.1.0
+refresh_interval_seconds: 5
+models:
+  - id: qwen3-coder-next-backup
+    name: Qwen3 Coder Next Backup on 8080
+    provider: wsl_llama_cpp
+    modality: llm
+    description: Backup coding model served through llama.cpp inside WSL.
+    endpoint: http://127.0.0.1:8080
+    health_url: http://127.0.0.1:8080/health
+    metadata:
+      family: Qwen3 Coder
+      size: Next Backup
+      host: 127.0.0.1
+      port: 8080
+      engine: llama.cpp
+      tags: [code, backup]
+    launch:
+      managed: true
+      command:
+        - wsl
+        - bash
+        - -lc
+        - /opt/llama.cpp/build/bin/llama-server -m ${QWEN3_CODER_NEXT_BACKUP_MODEL_PATH} -c {context_size} -b {batch_size} -ub {ubatch_size} --temp {temperature} --top-p {top_p} --top-k {top_k} --min-p {min_p} {cache_args} {extra_args} --host 0.0.0.0 --port 8080
+      working_dir: /opt/llama.cpp
+      environment:
+        LLAMA_LOG_COLORS: "0"
+    log_path: backend/logs/qwen3-coder-next-backup.log
+    active_profile_id: balanced
+    profiles:
+      - id: balanced
+        name: Balanced
+        context_size: 16384
+        batch_size: 1024
+        ubatch_size: 256
+        temperature: 0.2
+        top_p: 0.95
+        top_k: 40
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 256
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+        extra_args: [--ctx-size, "16384"]
+      - id: long-context
+        name: Long Context
+        context_size: 32768
+        batch_size: 768
+        ubatch_size: 192
+        temperature: 0.15
+        top_p: 0.92
+        top_k: 50
+        min_p: 0.03
+        cache_prompt: true
+        cache_reuse: 512
+        cache_type_k: q8_0
+        cache_type_v: q6_k
+        extra_args: [--no-webui]
+    settings:
+      allow_start_stop: true
+      auto_restart: false
+      health_enabled: true
+      health_interval_seconds: 10
+      startup_grace_seconds: 20
+      request_timeout_seconds: 5
+      log_tail_lines: 200
+      keep_alive: 15m
+
+  - id: qwen3-5-35b-a3b-local
+    name: Qwen3.5 35B A3B Local on 8081
+    provider: wsl_llama_cpp
+    modality: llm
+    description: Large local reasoning model for heavier coding and orchestration tasks.
+    endpoint: http://127.0.0.1:8081
+    health_url: http://127.0.0.1:8081/health
+    metadata:
+      family: Qwen3.5
+      size: 35B A3B
+      host: 127.0.0.1
+      port: 8081
+      engine: llama.cpp
+      tags: [heavy, reasoning]
+    launch:
+      managed: true
+      command:
+        - wsl
+        - bash
+        - -lc
+        - /opt/llama.cpp/build/bin/llama-server -m ${QWEN3_5_35B_A3B_MODEL_PATH} -c {context_size} -b {batch_size} -ub {ubatch_size} --temp {temperature} --top-p {top_p} --top-k {top_k} --min-p {min_p} {cache_args} {extra_args} --host 0.0.0.0 --port 8081
+      working_dir: /opt/llama.cpp
+    log_path: backend/logs/qwen3-5-35b-a3b-local.log
+    active_profile_id: balanced
+    profiles:
+      - id: balanced
+        name: Balanced
+        context_size: 12288
+        batch_size: 768
+        ubatch_size: 192
+        temperature: 0.25
+        top_p: 0.94
+        top_k: 40
+        min_p: 0.04
+        cache_prompt: true
+        cache_reuse: 256
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+        extra_args: [--threads, "12"]
+      - id: throughput
+        name: Throughput
+        context_size: 8192
+        batch_size: 1024
+        ubatch_size: 256
+        temperature: 0.2
+        top_p: 0.9
+        top_k: 32
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 128
+        cache_type_k: q6_k
+        cache_type_v: q6_k
+        extra_args: [--threads, "16"]
+    settings:
+      allow_start_stop: true
+      auto_restart: false
+      health_enabled: true
+      health_interval_seconds: 10
+      startup_grace_seconds: 20
+      request_timeout_seconds: 5
+      log_tail_lines: 200
+      keep_alive: 15m
+
+  - id: devstral-small-2-smart
+    name: Devstral Small 2 Smart on 8082
+    provider: wsl_llama_cpp
+    modality: llm
+    description: Small smart coding agent optimized for local iteration loops.
+    endpoint: http://127.0.0.1:8082
+    health_url: http://127.0.0.1:8082/health
+    metadata:
+      family: Devstral
+      size: Small 2
+      host: 127.0.0.1
+      port: 8082
+      engine: llama.cpp
+      tags: [code, agentic]
+    launch:
+      managed: true
+      command:
+        - wsl
+        - bash
+        - -lc
+        - /opt/llama.cpp/build/bin/llama-server -m ${DEVSTRAL_SMALL_2_SMART_MODEL_PATH} -c {context_size} -b {batch_size} -ub {ubatch_size} --temp {temperature} --top-p {top_p} --top-k {top_k} --min-p {min_p} {cache_args} {extra_args} --host 0.0.0.0 --port 8082
+      working_dir: /opt/llama.cpp
+    log_path: backend/logs/devstral-small-2-smart.log
+    active_profile_id: balanced
+    profiles:
+      - id: balanced
+        name: Balanced
+        context_size: 8192
+        batch_size: 768
+        ubatch_size: 192
+        temperature: 0.2
+        top_p: 0.95
+        top_k: 40
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 256
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+        extra_args: [--threads, "10"]
+      - id: concise
+        name: Concise
+        context_size: 6144
+        batch_size: 1024
+        ubatch_size: 256
+        temperature: 0.15
+        top_p: 0.9
+        top_k: 32
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 128
+        cache_type_k: q6_k
+        cache_type_v: q6_k
+        extra_args: [--mirostat, "0"]
+    settings:
+      allow_start_stop: true
+      auto_restart: false
+      health_enabled: true
+      health_interval_seconds: 10
+      startup_grace_seconds: 20
+      request_timeout_seconds: 5
+      log_tail_lines: 200
+      keep_alive: 15m
+
+  - id: qwen3-5-9b-fast
+    name: Qwen3.5 9B Fast on 8083
+    provider: wsl_llama_cpp
+    modality: llm
+    description: Responsive local model for fast coding bursts and tool tasks.
+    endpoint: http://127.0.0.1:8083
+    health_url: http://127.0.0.1:8083/health
+    metadata:
+      family: Qwen3.5
+      size: 9B
+      host: 127.0.0.1
+      port: 8083
+      engine: llama.cpp
+      tags: [fast, utility]
+    launch:
+      managed: true
+      command:
+        - wsl
+        - bash
+        - -lc
+        - /opt/llama.cpp/build/bin/llama-server -m ${QWEN3_5_9B_FAST_MODEL_PATH} -c {context_size} -b {batch_size} -ub {ubatch_size} --temp {temperature} --top-p {top_p} --top-k {top_k} --min-p {min_p} {cache_args} {extra_args} --host 0.0.0.0 --port 8083
+      working_dir: /opt/llama.cpp
+    log_path: backend/logs/qwen3-5-9b-fast.log
+    active_profile_id: balanced
+    profiles:
+      - id: balanced
+        name: Balanced
+        context_size: 8192
+        batch_size: 1024
+        ubatch_size: 256
+        temperature: 0.2
+        top_p: 0.94
+        top_k: 40
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 192
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+        extra_args: [--threads, "8"]
+      - id: throughput
+        name: Throughput
+        context_size: 6144
+        batch_size: 1536
+        ubatch_size: 384
+        temperature: 0.15
+        top_p: 0.9
+        top_k: 24
+        min_p: 0.04
+        cache_prompt: true
+        cache_reuse: 96
+        cache_type_k: q6_k
+        cache_type_v: q6_k
+        extra_args: [--threads, "12"]
+    settings:
+      allow_start_stop: true
+      auto_restart: false
+      health_enabled: true
+      health_interval_seconds: 10
+      startup_grace_seconds: 20
+      request_timeout_seconds: 5
+      log_tail_lines: 200
+      keep_alive: 15m
+
+  - id: qwen3-14b-mid
+    name: Qwen3 14B Mid on 8084
+    provider: wsl_llama_cpp
+    modality: llm
+    description: Mid-tier all-rounder for balanced local usage.
+    endpoint: http://127.0.0.1:8084
+    health_url: http://127.0.0.1:8084/health
+    metadata:
+      family: Qwen3
+      size: 14B
+      host: 127.0.0.1
+      port: 8084
+      engine: llama.cpp
+      tags: [balanced, general]
+    launch:
+      managed: true
+      command:
+        - wsl
+        - bash
+        - -lc
+        - /opt/llama.cpp/build/bin/llama-server -m ${QWEN3_14B_MID_MODEL_PATH} -c {context_size} -b {batch_size} -ub {ubatch_size} --temp {temperature} --top-p {top_p} --top-k {top_k} --min-p {min_p} {cache_args} {extra_args} --host 0.0.0.0 --port 8084
+      working_dir: /opt/llama.cpp
+    log_path: backend/logs/qwen3-14b-mid.log
+    active_profile_id: balanced
+    profiles:
+      - id: balanced
+        name: Balanced
+        context_size: 12288
+        batch_size: 768
+        ubatch_size: 192
+        temperature: 0.2
+        top_p: 0.95
+        top_k: 40
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 256
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+        extra_args: [--threads, "10"]
+      - id: memory-saver
+        name: Memory Saver
+        context_size: 8192
+        batch_size: 640
+        ubatch_size: 160
+        temperature: 0.18
+        top_p: 0.92
+        top_k: 32
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 128
+        cache_type_k: q6_k
+        cache_type_v: q6_k
+        extra_args: [--no-mmap]
+    settings:
+      allow_start_stop: true
+      auto_restart: false
+      health_enabled: true
+      health_interval_seconds: 10
+      startup_grace_seconds: 20
+      request_timeout_seconds: 5
+      log_tail_lines: 200
+      keep_alive: 15m
+
+  - id: gemma-3-4b-vision-ollama
+    name: Gemma 3 4B Vision via Ollama
+    provider: ollama
+    modality: vlm
+    description: Vision-capable Ollama model monitored through the local Ollama endpoint.
+    endpoint: http://127.0.0.1:11434
+    metadata:
+      family: Gemma 3
+      size: 4B Vision
+      host: 127.0.0.1
+      port: 11434
+      engine: Ollama
+      ollama_model: gemma3:4b
+      tags: [vision, ollama]
+    launch:
+      managed: false
+      command: []
+    log_path: backend/logs/gemma-3-4b-vision-ollama.log
+    active_profile_id: visual-balanced
+    profiles:
+      - id: visual-balanced
+        name: Visual Balanced
+        context_size: 8192
+        batch_size: 512
+        ubatch_size: 128
+        temperature: 0.2
+        top_p: 0.9
+        top_k: 40
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 128
+        cache_type_k: q8_0
+        cache_type_v: q8_0
+        extra_args: []
+      - id: visual-precise
+        name: Visual Precise
+        context_size: 6144
+        batch_size: 384
+        ubatch_size: 96
+        temperature: 0.1
+        top_p: 0.88
+        top_k: 24
+        min_p: 0.05
+        cache_prompt: true
+        cache_reuse: 64
+        cache_type_k: q6_k
+        cache_type_v: q6_k
+        extra_args: []
+    settings:
+      allow_start_stop: true
+      auto_restart: false
+      health_enabled: true
+      health_interval_seconds: 10
+      startup_grace_seconds: 5
+      request_timeout_seconds: 5
+      log_tail_lines: 200
+      keep_alive: 15m
