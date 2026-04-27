@@ -66,8 +66,9 @@ class HealthService:
         except ValueError:
             return "Healthy"
 
-        available = payload.get("models", [])
-        if any(str(item.get("name", "")).split(":")[0] == target_name.split(":")[0] for item in available):
+        loaded_models = payload.get("models", [])
+        target_base = target_name.split(":")[0]
+        if any(str(item.get("name", "")).split(":")[0] == target_base for item in loaded_models):
             return "Healthy"
         return f"Ollama endpoint is up but model '{target_name}' is not loaded."
 
@@ -77,5 +78,5 @@ class HealthService:
 
         base = model.endpoint.rstrip("/") + "/"
         if model.provider.value == "ollama":
-            return [urljoin(base, "api/tags")]
+            return [urljoin(base, "api/ps")]
         return [urljoin(base, "health"), urljoin(base, "v1/models")]

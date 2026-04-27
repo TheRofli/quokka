@@ -8,9 +8,17 @@ from app.domain.enums import ProviderType
 class ProfileConfig(BaseModel):
     id: str
     name: str
+    model_path: str | None = None
     context_size: int = Field(default=8192, ge=256)
     batch_size: int = Field(default=512, ge=1)
     ubatch_size: int = Field(default=128, ge=1)
+    n_gpu_layers: int | None = Field(default=None, ge=0)
+    parallel: int | None = Field(default=None, ge=1)
+    cache_ram: int | None = Field(default=None, ge=0)
+    repeat_penalty: float | None = Field(default=None, ge=0.0)
+    threads: int | None = Field(default=None, ge=1)
+    threads_batch: int | None = Field(default=None, ge=1)
+    api_default_completion_max_tokens: int | None = Field(default=None, ge=1)
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     top_p: float = Field(default=0.95, ge=0.0, le=1.0)
     top_k: int = Field(default=40, ge=1)
@@ -19,6 +27,12 @@ class ProfileConfig(BaseModel):
     cache_reuse: int | None = Field(default=256, ge=0)
     cache_type_k: str | None = "q8_0"
     cache_type_v: str | None = "q8_0"
+    flash_attn: bool | None = None
+    jinja: bool = False
+    no_mmap: bool = False
+    mlock: bool = False
+    override_tensor: str | None = None
+    reasoning_format: str | None = None
     extra_args: list[str] = Field(default_factory=list)
 
 
@@ -84,4 +98,3 @@ class AppConfig(BaseModel):
     version: str = "0.1.0"
     refresh_interval_seconds: int = Field(default=5, ge=2)
     models: list[ModelConfig] = Field(default_factory=list)
-

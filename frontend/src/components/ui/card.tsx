@@ -7,7 +7,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border border-line bg-white/[0.04] backdrop-blur-xl shadow-glow",
+        "rounded-lg border border-line/75 bg-panel/70 backdrop-blur-xl shadow-glow transition-colors duration-300",
         className
       )}
       {...props}
@@ -16,4 +16,3 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
 );
 
 Card.displayName = "Card";
-

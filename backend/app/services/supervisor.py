@@ -22,6 +22,7 @@ class RuntimeSupervisor:
                 exits = self._model_service.process_service.collect_exits()
                 if exits:
                     self._model_service.handle_process_exits(exits)
+                    await self._model_service.auto_restart_crashed_models()
                 await self._model_service.check_all_health()
             except Exception:  # noqa: BLE001
                 logger.exception("Runtime supervisor tick failed")
@@ -34,4 +35,3 @@ class RuntimeSupervisor:
 
     async def stop(self) -> None:
         self._stop_event.set()
-

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 from app.domain.enums import ModelStatus
 
@@ -20,4 +21,4 @@ class RuntimeState:
     health_latency_ms: float | None = None
     crash_count: int = 0
     last_transition_reason: str | None = None
-    details: dict[str, str] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)

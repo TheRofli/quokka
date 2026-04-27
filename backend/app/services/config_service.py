@@ -18,7 +18,15 @@ class ConfigService:
 
     def _load(self) -> AppConfig:
         if not self._config_path.exists():
-            raise FileNotFoundError(f"Quokka config file not found at {self._config_path}")
+            example_path = self._config_path.with_name("quokka.example.yaml")
+            self._config_path.parent.mkdir(parents=True, exist_ok=True)
+            if example_path.exists():
+                self._config_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
+            else:
+                self._config_path.write_text(
+                    "app_name: Quokka\nversion: 0.1.0\nrefresh_interval_seconds: 5\nmodels: []\n",
+                    encoding="utf-8",
+                )
 
         raw = self._config_path.read_text(encoding="utf-8")
         payload = yaml.safe_load(raw) if self._config_path.suffix in {".yaml", ".yml"} else json.loads(raw)
@@ -69,6 +77,22 @@ class ConfigService:
             self._replace_model(updated)
             self._save()
             return updated.model_copy(deep=True)
+
+    def create_model(self, model: ModelConfig) -> ModelConfig:
+        with self._lock:
+            if any(existing.id == model.id for existing in self._config.models):
+                raise BadRequestError(f"Model '{model.id}' already exists.")
+            self._config.models.append(model)
+            self._save()
+            return model.model_copy(deep=True)
+
+    def delete_model(self, model_id: str) -> None:
+        with self._lock:
+            remaining = [model for model in self._config.models if model.id != model_id]
+            if len(remaining) == len(self._config.models):
+                raise NotFoundError(f"Model '{model_id}' was not found.")
+            self._config.models = remaining
+            self._save()
 
     def list_profiles(self, model_id: str) -> list[ProfileConfig]:
         model = self.get_model(model_id)

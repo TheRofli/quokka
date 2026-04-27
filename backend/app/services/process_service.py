@@ -67,7 +67,11 @@ class ProcessService:
                 "shell": model.launch.shell,
             }
             if os.name == "nt":
-                kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(
+                    subprocess,
+                    "CREATE_NO_WINDOW",
+                    0,
+                )
             else:
                 kwargs["start_new_session"] = True
 

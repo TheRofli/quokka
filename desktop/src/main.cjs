@@ -1,7 +1,8 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell } = require("electron");
 const childProcess = require("node:child_process");
+const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
 
@@ -21,6 +22,7 @@ const PORT = Number(process.env.QUOKKA_BACKEND_PORT ?? "8000");
 const APP_URL = `http://${HOST}:${PORT}/`;
 const HEALTH_URL = `http://${HOST}:${PORT}/api/system/health`;
 const MODELS_URL = `http://${HOST}:${PORT}/api/models`;
+const METRICS_URL = `http://${HOST}:${PORT}/api/system/metrics`;
 
 let mainWindow = null;
 let tray = null;
@@ -69,6 +71,63 @@ function requestJson(url, timeoutMs = 1800) {
   });
 }
 
+function logDesktop(message) {
+  try {
+    const line = `${new Date().toISOString()} | ${message}\n`;
+    fs.appendFileSync(path.join(logsDir(), "quokka-desktop.log"), line, "utf8");
+  } catch {
+    // Logging must never block app startup.
+  }
+}
+
+async function backendSupportsCurrentApi() {
+  try {
+    const metrics = await requestJson(METRICS_URL);
+    return Array.isArray(metrics.history) && typeof metrics.disk_read_mb_s !== "undefined";
+  } catch {
+    return false;
+  }
+}
+
+function stopProcessOnPort(port) {
+  if (process.platform !== "win32") {
+    return false;
+  }
+
+  try {
+    const result = childProcess.spawnSync("netstat", ["-ano", "-p", "tcp"], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    const rows = `${result.stdout}\n${result.stderr}`.split(/\r?\n/);
+    const pattern = new RegExp(`(?:127\\.0\\.0\\.1|0\\.0\\.0\\.0|\\[::\\]|::1):${port}\\s+.*LISTENING\\s+(\\d+)`, "i");
+    const pids = new Set();
+
+    for (const row of rows) {
+      const match = row.match(pattern);
+      if (match?.[1]) {
+        pids.add(match[1]);
+      }
+    }
+
+    for (const pid of pids) {
+      if (pid === String(process.pid)) {
+        continue;
+      }
+      logDesktop(`Stopping process ${pid} on port ${port}`);
+      childProcess.spawnSync("taskkill", ["/PID", pid, "/T", "/F"], {
+        windowsHide: true,
+        stdio: "ignore",
+      });
+    }
+
+    return pids.size > 0;
+  } catch (error) {
+    logDesktop(`Failed to stop process on port ${port}: ${error.message}`);
+    return false;
+  }
+}
+
 async function isBackendOnline() {
   try {
     await requestJson(HEALTH_URL);
@@ -104,14 +163,26 @@ function backendEnvironment() {
 
 async function startBackend() {
   if (await isBackendOnline()) {
-    ownsBackend = false;
-    return true;
+    if (await backendSupportsCurrentApi()) {
+      ownsBackend = false;
+      return true;
+    }
+
+    logDesktop("Existing backend API is stale. Restarting backend on port 8000.");
+    stopProcessOnPort(PORT);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+
+    if (await isBackendOnline()) {
+      ownsBackend = false;
+      return true;
+    }
   }
 
   const executable = backendExecutable();
   const env = backendEnvironment();
 
   if (executable) {
+    logDesktop(`Starting backend executable: ${executable}`);
     backendProcess = childProcess.spawn(executable, ["--host", HOST, "--port", String(PORT)], {
       cwd: backendDir(),
       env,
@@ -124,6 +195,7 @@ async function startBackend() {
       throw new Error("No backend executable or Python interpreter was found.");
     }
 
+    logDesktop(`Starting backend through Python: ${python}`);
     backendProcess = childProcess.spawn(
       python,
       ["-m", "uvicorn", "app.main:app", "--host", HOST, "--port", String(PORT)],
@@ -138,6 +210,7 @@ async function startBackend() {
 
   ownsBackend = true;
   backendProcess.once("exit", () => {
+    logDesktop("Backend process exited.");
     backendProcess = null;
     if (!quitting) {
       updateTray("danger");
@@ -173,9 +246,13 @@ async function restartBackend() {
   updateTray("warning");
   await startBackend();
   if (mainWindow) {
-    await mainWindow.loadURL(APP_URL);
+    await mainWindow.loadURL(appUrl());
   }
   await refreshTrayState();
+}
+
+function appUrl() {
+  return `${APP_URL}?fresh=${Date.now()}`;
 }
 
 function createWindow() {
@@ -192,6 +269,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, "preload.cjs"),
       sandbox: true,
     },
   });
@@ -207,8 +285,92 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadURL(APP_URL);
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    logDesktop(`Renderer process gone: ${details.reason}`);
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl) => {
+    logDesktop(`Failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`);
+  });
+
+  mainWindow.loadURL(appUrl());
 }
+
+ipcMain.handle("quokka:open-folder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Choose Agent Lab workspace",
+    properties: ["openDirectory"],
+  });
+  if (result.canceled || !result.filePaths.length) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+function ensureFolderPath(folderPath) {
+  if (!folderPath || typeof folderPath !== "string") {
+    throw new Error("No workspace folder was selected.");
+  }
+  const resolved = path.resolve(folderPath);
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    throw new Error("Workspace folder does not exist.");
+  }
+  return resolved;
+}
+
+function spawnDetached(command, args, options = {}) {
+  try {
+    const child = childProcess.spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: false,
+      ...options,
+    });
+    child.on("error", (error) => logDesktop(`Failed to launch ${command}: ${error.message}`));
+    child.unref();
+    return { ok: true, message: `Opened with ${command}` };
+  } catch (error) {
+    logDesktop(`Failed to launch ${command}: ${error.message}`);
+    return { ok: false, message: error.message };
+  }
+}
+
+ipcMain.handle("quokka:open-workspace", async (_event, folderPath, target) => {
+  try {
+    const resolved = ensureFolderPath(folderPath);
+    const gitBash = "C:\\Program Files\\Git\\git-bash.exe";
+    const launchers = {
+      vscode: () => spawnDetached("code", [resolved]),
+      visualstudio: () => spawnDetached("devenv", [resolved]),
+      cursor: () => spawnDetached("cursor", [resolved]),
+      explorer: async () => {
+        const result = await shell.openPath(resolved);
+        return { ok: !result, message: result || "Opened in File Explorer" };
+      },
+      gitbash: () => (fs.existsSync(gitBash) ? spawnDetached(gitBash, ["--cd=" + resolved]) : spawnDetached("git-bash", ["--cd=" + resolved])),
+      androidstudio: () => spawnDetached("studio64", [resolved]),
+      idea: () => spawnDetached("idea64", [resolved]),
+      pycharm: () => spawnDetached("pycharm64", [resolved]),
+    };
+    const launcher = launchers[target] ?? launchers.explorer;
+    return await launcher();
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+});
+
+ipcMain.handle("quokka:open-terminal", async (_event, folderPath) => {
+  try {
+    const resolved = ensureFolderPath(folderPath);
+    const result = spawnDetached("wt.exe", ["-d", resolved]);
+    if (result.ok) {
+      return result;
+    }
+    return spawnDetached("powershell.exe", ["-NoExit", "-Command", "Set-Location -LiteralPath " + JSON.stringify(resolved)]);
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+});
 
 function showWindow() {
   if (!mainWindow) {
@@ -308,8 +470,10 @@ async function bootstrap() {
 }
 
 app.whenReady().then(() => {
+  logDesktop("Electron app is ready.");
   bootstrap().catch((error) => {
     updateTray("danger");
+    logDesktop(`Bootstrap failed: ${error.message}`);
     shell.openPath(path.join(logsDir(), "quokka-backend.log"));
     console.error(error);
   });

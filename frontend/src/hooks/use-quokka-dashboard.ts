@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "@/api/client";
-import type { AppConfig, HealthCheckResponse, LogResponse, ModelView, ProfileConfig, SystemMetricsResponse } from "@/types/api";
+import type {
+  AppConfig,
+  HealthCheckResponse,
+  LogResponse,
+  MetricHistoryPoint,
+  ModelResourceHistoryPoint,
+  ModelSettings,
+  ModelView,
+  ProfileConfig,
+  SystemMetricsResponse,
+} from "@/types/api";
 
 const DEFAULT_LOGS: LogResponse = { model_id: "", path: "", lines: [] };
+const MODEL_RESOURCE_HISTORY_MS = 24 * 60 * 60 * 1000;
 
 export function useQuokkaDashboard() {
   const [metrics, setMetrics] = useState<SystemMetricsResponse | null>(null);
+  const [metricHistory, setMetricHistory] = useState<MetricHistoryPoint[]>([]);
   const [models, setModels] = useState<ModelView[]>([]);
+  const [modelResourceHistory, setModelResourceHistory] = useState<ModelResourceHistoryPoint[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [logs, setLogs] = useState<LogResponse>(DEFAULT_LOGS);
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
@@ -16,10 +29,12 @@ export function useQuokkaDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [busyModelIds, setBusyModelIds] = useState<Record<string, boolean>>({});
 
-  const selectedModel = useMemo(
-    () => models.find((model) => model.id === selectedModelId) ?? models[0] ?? null,
-    [models, selectedModelId]
-  );
+  const selectedModel = useMemo(() => {
+    if (selectedModelId) {
+      return models.find((model) => model.id === selectedModelId) ?? null;
+    }
+    return models[0] ?? null;
+  }, [models, selectedModelId]);
 
   const markBusy = useCallback((modelId: string, busy: boolean) => {
     setBusyModelIds((current) => ({ ...current, [modelId]: busy }));
@@ -27,10 +42,39 @@ export function useQuokkaDashboard() {
 
   const refreshDashboard = useCallback(async () => {
     try {
-      const [nextMetrics, nextModels, nextConfig] = await Promise.all([api.getMetrics(), api.getModels(), api.getConfig()]);
+      const [nextMetrics, nextModels, nextConfig, nextMetricHistory] = await Promise.all([
+        api.getMetrics(),
+        api.getModels(),
+        api.getConfig(),
+        api.getMetricHistory(24 * 60),
+      ]);
       setMetrics(nextMetrics);
+      setMetricHistory(nextMetricHistory);
       setModels(nextModels);
       setConfig(nextConfig);
+      setModelResourceHistory((current) => {
+        const timestamp = nextMetrics.timestamp ?? new Date().toISOString();
+        const nextSamples = nextModels.map((model) => ({
+          timestamp,
+          model_id: model.id,
+          model_name: model.name,
+          status: model.runtime.status,
+          cpu_percent: model.runtime.resource_usage?.cpu_percent ?? null,
+          ram_mb: model.runtime.resource_usage?.ram_mb ?? null,
+          memory_percent: model.runtime.resource_usage?.memory_percent ?? null,
+          vram_mb: model.runtime.resource_usage?.vram_mb ?? null,
+          gpu_percent: model.runtime.resource_usage?.gpu_percent ?? null,
+          disk_read_mb_s: model.runtime.resource_usage?.disk_read_mb_s ?? null,
+          disk_write_mb_s: model.runtime.resource_usage?.disk_write_mb_s ?? null,
+          attribution: model.runtime.resource_usage?.attribution ?? "unavailable",
+          confidence: model.runtime.resource_usage?.confidence ?? "none",
+        }));
+        const cutoff = Date.now() - MODEL_RESOURCE_HISTORY_MS;
+        return [...current, ...nextSamples].filter((point) => {
+          const time = new Date(point.timestamp).getTime();
+          return Number.isFinite(time) && time >= cutoff;
+        });
+      });
       setSelectedModelId((current) => current ?? nextModels[0]?.id ?? null);
       setError(null);
     } catch (nextError) {
@@ -80,14 +124,14 @@ export function useQuokkaDashboard() {
   }, [refreshDashboard]);
 
   useEffect(() => {
-    void refreshLogs(selectedModel?.id);
-    void refreshHealth(selectedModel?.id);
+    void refreshLogs(selectedModelId);
+    void refreshHealth(selectedModelId);
     const intervalId = window.setInterval(() => {
-      void refreshLogs(selectedModel?.id);
-      void refreshHealth(selectedModel?.id);
+      void refreshLogs(selectedModelId);
+      void refreshHealth(selectedModelId);
     }, 2500);
     return () => window.clearInterval(intervalId);
-  }, [refreshHealth, refreshLogs, selectedModel?.id]);
+  }, [refreshHealth, refreshLogs, selectedModelId]);
 
   const runModelAction = useCallback(
     async (modelId: string, action: "start" | "stop" | "restart") => {
@@ -110,6 +154,28 @@ export function useQuokkaDashboard() {
       }
     },
     [markBusy, refreshDashboard, refreshHealth, refreshLogs]
+  );
+
+  const updateModelSettings = useCallback(
+    async (modelId: string, settings: ModelSettings) => {
+      try {
+        const updated = await api.updateModelSettings(modelId, settings);
+        setModels((current) => current.map((model) => (model.id === modelId ? updated : model)));
+        setConfig((current) => {
+          if (!current) {
+            return current;
+          }
+          return {
+            ...current,
+            models: current.models.map((model) => (model.id === modelId ? { ...model, settings: updated.settings } : model)),
+          };
+        });
+        setError(null);
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : "Failed to update model settings");
+      }
+    },
+    []
   );
 
   const saveRawConfig = useCallback(
@@ -153,6 +219,48 @@ export function useQuokkaDashboard() {
     [refreshDashboard]
   );
 
+  const deleteModel = useCallback(
+    async (modelId: string, deleteFile = false) => {
+      try {
+        await api.deleteModel(modelId, deleteFile);
+        setSelectedModelId((current) => (current === modelId ? null : current));
+        await refreshDashboard();
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : "Failed to delete model");
+      }
+    },
+    [refreshDashboard]
+  );
+
+  const renameModel = useCallback(async (modelId: string, name: string) => {
+    try {
+      const updated = await api.renameModel(modelId, name);
+      setModels((current) => current.map((model) => (model.id === modelId ? updated : model)));
+      setConfig((current) => {
+        if (!current) {
+          return current;
+        }
+        return {
+          ...current,
+          models: current.models.map((model) => (model.id === modelId ? { ...model, name: updated.name } : model)),
+        };
+      });
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to rename model");
+    }
+  }, []);
+
+  const clearLogs = useCallback(async (modelId: string) => {
+    try {
+      const nextLogs = await api.clearLogs(modelId);
+      setLogs(nextLogs);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Failed to clear logs");
+    }
+  }, []);
+
   const activateProfile = useCallback(
     async (modelId: string, profileId: string) => {
       try {
@@ -167,7 +275,9 @@ export function useQuokkaDashboard() {
 
   return {
     metrics,
+    metricHistory,
     models,
+    modelResourceHistory,
     config,
     logs,
     health,
@@ -181,9 +291,13 @@ export function useQuokkaDashboard() {
     refreshLogs,
     refreshHealth,
     runModelAction,
+    updateModelSettings,
     saveRawConfig,
     saveProfile,
     deleteProfile,
+    deleteModel,
+    renameModel,
+    clearLogs,
     activateProfile,
   };
 }

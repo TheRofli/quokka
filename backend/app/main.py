@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import config, models, profiles, system
+from app.api.routes import agent, chat, config, models, profiles, system
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.services.config_service import ConfigService
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     config_service = ConfigService(settings.config_path)
     log_service = LogService(settings.logs_dir)
     health_service = HealthService()
-    metrics_service = MetricsService()
+    metrics_service = MetricsService(settings.metrics_db_path)
     process_service = ProcessService(log_service)
     model_service = ModelService(
         config_service=config_service,
@@ -74,6 +74,8 @@ def create_app() -> FastAPI:
     app.include_router(models.router, prefix=settings.api_prefix)
     app.include_router(profiles.router, prefix=settings.api_prefix)
     app.include_router(config.router, prefix=settings.api_prefix)
+    app.include_router(chat.router, prefix=settings.api_prefix)
+    app.include_router(agent.router, prefix=settings.api_prefix)
 
     frontend_dist = settings.frontend_dist
     if frontend_dist.exists():

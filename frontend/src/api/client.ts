@@ -1,7 +1,20 @@
 import type {
   AppConfig,
+  AgentRunRequest,
+  AgentRunResponse,
+  AgentRunStatusResponse,
+  AgentWorkspaceReviewResponse,
+  BenchmarkRunRequest,
+  BenchmarkRunResponse,
+  ChatCompletionRequest,
+  ChatCompletionResponse,
+  ChatStreamEvent,
+  CreateModelRequest,
+  DiscoveredModelArtifact,
   HealthCheckResponse,
   LogResponse,
+  MetricHistoryPoint,
+  ModelSettings,
   ModelView,
   ProfileConfig,
   SystemMetricsResponse,
@@ -19,27 +32,175 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let detail = response.statusText;
+    let detail: unknown = response.statusText;
     try {
       const payload = await response.json();
       detail = payload.detail ?? payload.message ?? detail;
     } catch {
       // Ignore parse errors and keep the status text.
     }
-    throw new Error(detail || "Unexpected API error");
+    const message =
+      typeof detail === "string"
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : "Unexpected API error";
+    throw new Error(message);
   }
 
   return (await response.json()) as T;
 }
 
+async function streamRequest<TPayload>(
+  path: string,
+  payload: TPayload,
+  onEvent: (event: ChatStreamEvent) => void
+): Promise<void> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    let detail: unknown = response.statusText;
+    try {
+      const payload = await response.json();
+      detail = payload.detail ?? payload.message ?? detail;
+    } catch {
+      // Ignore parse errors and keep the status text.
+    }
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming response did not include a body.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const dispatchBlock = (block: string) => {
+    const eventLine = block.split("\n").find((line) => line.startsWith("event:"));
+    const dataLines = block
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trim());
+    if (!eventLine || !dataLines.length) {
+      return;
+    }
+    const eventName = eventLine.slice(6).trim();
+    const data = JSON.parse(dataLines.join("\n")) as Record<string, unknown>;
+    if (eventName === "delta") {
+      onEvent({ type: "delta", delta: String(data.delta ?? "") });
+    } else if (eventName === "thinking_delta") {
+      onEvent({ type: "thinking_delta", delta: String(data.delta ?? "") });
+    } else if (eventName === "done") {
+      onEvent({ type: "done", response: data as unknown as ChatCompletionResponse });
+    } else if (eventName === "error") {
+      const detail = data.detail ?? "Streaming request failed.";
+      onEvent({ type: "error", detail: typeof detail === "string" ? detail : JSON.stringify(detail) });
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+    const blocks = buffer.split(/\n\n/);
+    buffer = blocks.pop() ?? "";
+    blocks.forEach(dispatchBlock);
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    dispatchBlock(buffer);
+  }
+}
+
 export const api = {
   getMetrics: () => request<SystemMetricsResponse>("/system/metrics"),
+  createChatCompletion: (payload: ChatCompletionRequest) =>
+    request<ChatCompletionResponse>("/chat/completion", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  streamChatCompletion: (payload: ChatCompletionRequest, onEvent: (event: ChatStreamEvent) => void) =>
+    streamRequest("/chat/completion/stream", payload, onEvent),
+  runAgent: (payload: AgentRunRequest, signal?: AbortSignal) =>
+    request<AgentRunResponse>("/agent/run", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      signal,
+    }),
+  startAgentRun: (payload: AgentRunRequest) =>
+    request<AgentRunStatusResponse>("/agent/runs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  listAgentRuns: (workspacePath?: string) =>
+    request<AgentRunStatusResponse[]>(
+      `/agent/runs${workspacePath ? `?workspace_path=${encodeURIComponent(workspacePath)}` : ""}`
+    ),
+  getAgentRun: (runId: string) => request<AgentRunStatusResponse>(`/agent/runs/${runId}`),
+  cancelAgentRun: (runId: string) =>
+    request<AgentRunStatusResponse>(`/agent/runs/${runId}/cancel`, {
+      method: "POST",
+    }),
+  approveAgentRun: (runId: string, action: "approve" | "reject" | "generate_patch" | "apply" | "retry_patch", note?: string) =>
+    request<AgentRunStatusResponse>(`/agent/runs/${runId}/approval`, {
+      method: "POST",
+      body: JSON.stringify({ action, note }),
+    }),
+  getAgentReview: (workspacePath: string) =>
+    request<AgentWorkspaceReviewResponse>("/agent/review", {
+      method: "POST",
+      body: JSON.stringify({ workspace_path: workspacePath }),
+    }),
+  getAgentRunReview: (runId: string) => request<AgentWorkspaceReviewResponse>(`/agent/runs/${runId}/review`),
+  getMetricHistory: (minutes = 60) => request<MetricHistoryPoint[]>(`/system/metrics/history?minutes=${minutes}`),
   getModels: () => request<ModelView[]>("/models"),
+  discoverModels: (query = "", limit = 80) =>
+    request<DiscoveredModelArtifact[]>(`/models/discover?limit=${limit}${query ? `&query=${encodeURIComponent(query)}` : ""}`),
+  createModel: (payload: CreateModelRequest) =>
+    request<ModelView>("/models", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getModel: (modelId: string) => request<ModelView>(`/models/${modelId}`),
+  deleteModel: (modelId: string, deleteFile = false) =>
+    request<{ message: string }>(`/models/${modelId}?delete_file=${deleteFile ? "true" : "false"}`, { method: "DELETE" }),
+  renameModel: (modelId: string, name: string) =>
+    request<ModelView>(`/models/${modelId}/name`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
   startModel: (modelId: string) => request<ModelView>(`/models/${modelId}/start`, { method: "POST" }),
   stopModel: (modelId: string) => request<ModelView>(`/models/${modelId}/stop`, { method: "POST" }),
   restartModel: (modelId: string) => request<ModelView>(`/models/${modelId}/restart`, { method: "POST" }),
+  runBenchmark: (modelId: string, payload: BenchmarkRunRequest) =>
+    request<BenchmarkRunResponse>(`/models/${modelId}/benchmark`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  startBenchmarkRun: (modelId: string, payload: BenchmarkRunRequest) =>
+    request<BenchmarkRunResponse>(`/models/${modelId}/benchmark/runs`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getBenchmarkRun: (modelId: string, runId: string) =>
+    request<BenchmarkRunResponse>(`/models/${modelId}/benchmark/runs/${runId}`),
+  cancelBenchmarkRun: (modelId: string, runId: string) =>
+    request<BenchmarkRunResponse>(`/models/${modelId}/benchmark/runs/${runId}/cancel`, { method: "POST" }),
+  updateModelSettings: (modelId: string, payload: ModelSettings) =>
+    request<ModelView>(`/models/${modelId}/settings`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   getLogs: (modelId: string, limit = 200) => request<LogResponse>(`/models/${modelId}/logs?limit=${limit}`),
+  clearLogs: (modelId: string) => request<LogResponse>(`/models/${modelId}/logs`, { method: "DELETE" }),
   getHealth: (modelId: string) => request<HealthCheckResponse>(`/models/${modelId}/health`),
   getConfig: () => request<AppConfig>("/config"),
   saveConfig: (payload: AppConfig) =>

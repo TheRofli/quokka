@@ -30,6 +30,11 @@ class LogService:
             handle.write(f"{timestamp} | {message}\n")
         return path
 
+    def clear(self, model_id: str, configured_path: str | None = None) -> Path:
+        path = self.get_log_path(model_id, configured_path)
+        path.write_text("", encoding="utf-8")
+        return self.append_event(model_id, "Logs cleared from Quokka UI.", configured_path)
+
     def read_tail(self, model_id: str, configured_path: str | None = None, limit: int = 200) -> tuple[Path, list[str]]:
         path = self.get_log_path(model_id, configured_path)
         if not path.exists():
@@ -38,4 +43,3 @@ class LogService:
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             lines = list(deque(handle, maxlen=limit))
         return path, [line.rstrip("\n") for line in lines]
-

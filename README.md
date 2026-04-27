@@ -8,6 +8,28 @@ Quokka is a local AI model manager for supervising local LLM and VLM endpoints a
 
 It ships as a modular FastAPI backend, a React/Vite control room UI, and an optional Electron desktop wrapper with a Windows tray icon.
 
+## Install From GitHub
+
+Windows source install, no `.exe` required:
+
+```powershell
+irm https://raw.githubusercontent.com/TheRofli/Quokka/main/install.ps1 | iex
+```
+
+After the installer finishes, open a new terminal and run:
+
+```powershell
+quokka
+```
+
+The installer clones the repo into `%LOCALAPPDATA%\Quokka\app`, prepares the Python/Node dependencies, creates a local `backend/config/quokka.yaml` from `quokka.example.yaml`, adds `%LOCALAPPDATA%\Quokka\bin` to the user `PATH`, and launches Quokka.
+
+Requirements:
+
+- Git for Windows
+- Node.js LTS
+- Python 3.11+
+
 ## Stack
 
 Backend:
@@ -27,6 +49,7 @@ Frontend:
 - Vite
 - TailwindCSS
 - shadcn-style component structure
+- Chart.js / react-chartjs-2
 - lucide-react
 - framer-motion
 
@@ -40,8 +63,9 @@ Desktop:
 ## Features
 
 - live dashboard for GPU, VRAM, temperature, CPU, RAM, and active model count
+- extended CPU, GPU, memory, disk, network, and process telemetry
+- SQLite-backed metric history for trend charts
 - central model grid with status badges and lifecycle actions
-- bottom quick selector for fast context switching
 - right-side inspection panel with details, logs, profiles, settings, and raw config editing
 - subprocess management for local `llama.cpp` processes
 - Ollama warm/unload flow through the Ollama API
@@ -64,7 +88,8 @@ Quokka/
 |   |   |-- services/
 |   |   `-- utils/
 |   |-- config/
-|   |   `-- quokka.yaml
+|   |   |-- quokka.example.yaml
+|   |   `-- quokka.yaml        # local only, ignored by git
 |   |-- logs/
 |   `-- requirements.txt
 |-- desktop/
@@ -79,36 +104,18 @@ Quokka/
 `-- README.md
 ```
 
-## Default Models
-
-The bundled config includes:
-
-- Qwen3 Coder Next Backup on `8080`
-- Qwen3.5 35B A3B Local on `8081`
-- Devstral Small 2 Smart on `8082`
-- Qwen3.5 9B Fast on `8083`
-- Qwen3 14B Mid on `8084`
-- Gemma 3 4B Vision via Ollama
-
 ## Configuration
 
-The main runtime config lives in `backend/config/quokka.yaml`.
+The main runtime config lives in `backend/config/quokka.yaml`. That file is local-only and ignored by git because it contains machine-specific model paths, WSL distro names, ports, and launch commands.
 
-For the bundled `llama.cpp` entries, the launch commands expect environment variables such as:
-
-- `QWEN3_CODER_NEXT_BACKUP_MODEL_PATH`
-- `QWEN3_5_35B_A3B_MODEL_PATH`
-- `DEVSTRAL_SMALL_2_SMART_MODEL_PATH`
-- `QWEN3_5_9B_FAST_MODEL_PATH`
-- `QWEN3_14B_MID_MODEL_PATH`
-
-You can either export those paths before starting the backend or edit the YAML launch commands directly.
+Fresh installs create `quokka.yaml` from `backend/config/quokka.example.yaml`, which starts with an empty model list. Add local GGUF/Ollama/OpenAI-compatible endpoints from the Quokka UI.
 
 ## Backend API
 
 The backend exposes:
 
 - `GET /api/system/metrics`
+- `GET /api/system/metrics/history?minutes=60`
 - `GET /api/system/health`
 - `GET /api/models`
 - `GET /api/models/{model_id}`
@@ -197,6 +204,7 @@ Output goes to `desktop/release/`.
 ## Notes
 
 - GPU metrics use `nvidia-smi` when available. If it is missing, Quokka falls back gracefully.
+- Metric history is stored in `backend/data/metrics.sqlite3` by default and is ignored by git.
 - WSL-backed models are treated as managed subprocesses and monitored for unexpected exits.
 - Ollama models are started by warm-loading them and stopped by sending `keep_alive: 0`.
 - Logs are written to `backend/logs` in dev mode and to the app user-data logs folder in packaged desktop mode.
