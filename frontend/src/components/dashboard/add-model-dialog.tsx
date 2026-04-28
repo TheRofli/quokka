@@ -33,9 +33,10 @@ function bytesToGb(bytes?: number | null) {
 
 function defaultPayload(models: ModelView[]): CreateModelRequest {
   return {
-    provider: "wsl_llama_cpp",
+    provider: "windows_llama_cpp",
     name: "New Local Model",
     model_path: "",
+    llama_server_path: null,
     port: nextPort(models),
     host: "127.0.0.1",
     modality: "llm",
@@ -60,6 +61,7 @@ function defaultPayload(models: ModelView[]): CreateModelRequest {
 function payloadFromArtifact(artifact: DiscoveredModelArtifact, models: ModelView[]): CreateModelRequest {
   return {
     ...defaultPayload(models),
+    provider: artifact.provider,
     name: artifact.suggested_name,
     model_path: artifact.launch_path,
     family: artifact.family,
@@ -67,6 +69,17 @@ function payloadFromArtifact(artifact: DiscoveredModelArtifact, models: ModelVie
     quantization: artifact.quantization,
     description: `Local llama.cpp model from ${artifact.file_name}.`,
   };
+}
+
+function inferProviderFromPath(path: string, fallback: CreateModelRequest["provider"]) {
+  const trimmed = path.trim();
+  if (/^[a-zA-Z]:[\\/]/.test(trimmed) || trimmed.startsWith("\\\\")) {
+    return "windows_llama_cpp";
+  }
+  if (trimmed.startsWith("/") || trimmed.startsWith("~/")) {
+    return "wsl_llama_cpp";
+  }
+  return fallback;
 }
 
 export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialogProps) {
@@ -151,7 +164,9 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[#FF8C42]">Add Model</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">Find local GGUF files</h2>
-            <p className="mt-2 text-sm text-white/55">Quokka scans WSL ~/llm/models and common local model folders, then writes the config for you.</p>
+            <p className="mt-2 text-sm text-white/55">
+              Quokka scans common Windows drives, WSL ~/llm/models, and any folder pasted into search, then writes the launch config for you.
+            </p>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} className="rounded-none border border-[#2A2A2A] bg-[#111111] text-white/75 hover:border-[#FF8C42] hover:text-[#FF8C42]">
             <X className="h-5 w-5" />
@@ -197,6 +212,7 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                     <span className="border border-[#2A2A2A] bg-[#0A0A0A] px-2 py-1 text-xs uppercase text-white/55">{artifact.source}</span>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-white/55">
+                    <span>{artifact.provider === "windows_llama_cpp" ? "Windows llama.cpp" : "WSL llama.cpp"}</span>
                     <span>{artifact.family ?? "custom"}</span>
                     <span>{artifact.quantization ?? "unknown quant"}</span>
                     <span>{bytesToGb(artifact.size_bytes)}</span>
@@ -206,7 +222,7 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
               {!artifacts.length ? (
                 <div className="border border-[#252525] bg-[#111111] px-4 py-8 text-center text-sm text-white/55">
                   <FileSearch className="mx-auto mb-3 h-6 w-6 text-[#FF8C42]" />
-                  No new GGUF files found yet. You can paste a model path manually on the right.
+                  No new GGUF files found yet. Paste a folder like D:\Models into search, or paste a GGUF file path manually on the right.
                 </div>
               ) : null}
             </div>
@@ -214,6 +230,19 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
 
           <div className="min-h-0 overflow-y-auto px-5 py-5">
             <div className="space-y-3">
+              <label className="space-y-1">
+                <span className="text-[11px] uppercase tracking-[0.18em] text-white/38">Runtime</span>
+                <select
+                  value={draft.provider}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, provider: event.target.value as CreateModelRequest["provider"] }))
+                  }
+                  className="h-10 w-full rounded-none border border-[#2A2A2A] bg-[#111111] px-3 text-sm text-white outline-none"
+                >
+                  <option value="windows_llama_cpp">Windows llama.cpp, no WSL</option>
+                  <option value="wsl_llama_cpp">WSL llama.cpp</option>
+                </select>
+              </label>
               <label className="space-y-1">
                   <span className="text-[11px] uppercase tracking-[0.18em] text-white/38">Name</span>
                   <Input
@@ -226,10 +255,40 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                   <span className="text-[11px] uppercase tracking-[0.18em] text-white/38">Model path</span>
                   <Input
                     value={draft.model_path}
-                    onChange={(event) => setDraft((current) => ({ ...current, model_path: event.target.value }))}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        model_path: event.target.value,
+                        provider: inferProviderFromPath(event.target.value, current.provider),
+                      }))
+                    }
                     className="rounded-none border-[#2A2A2A] bg-[#111111] text-white"
                   />
                 </label>
+                {draft.provider === "windows_llama_cpp" ? (
+                  <label className="space-y-1">
+                    <span className="text-[11px] uppercase tracking-[0.18em] text-white/38">llama-server.exe</span>
+                    <Input
+                      value={draft.llama_server_path ?? ""}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, llama_server_path: event.target.value || null }))
+                      }
+                      placeholder="Optional: leave empty if llama-server.exe is in PATH"
+                      className="rounded-none border-[#2A2A2A] bg-[#111111] text-white placeholder:text-white/30"
+                    />
+                    <p className="text-xs text-white/42">Windows launch uses this executable directly and does not require WSL.</p>
+                  </label>
+                ) : (
+                  <label className="space-y-1">
+                    <span className="text-[11px] uppercase tracking-[0.18em] text-white/38">WSL distro</span>
+                    <Input
+                      value={draft.wsl_distro}
+                      onChange={(event) => setDraft((current) => ({ ...current, wsl_distro: event.target.value }))}
+                      className="rounded-none border-[#2A2A2A] bg-[#111111] text-white"
+                    />
+                    <p className="text-xs text-white/42">Use this only when the model path is inside WSL, for example /home/user/llm/models/model.gguf.</p>
+                  </label>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <label className="space-y-1">
                     <span className="text-[11px] uppercase tracking-[0.18em] text-white/38">Port</span>

@@ -1,4 +1,4 @@
-export type ProviderType = "wsl_llama_cpp" | "ollama" | "openai_compatible";
+export type ProviderType = "wsl_llama_cpp" | "windows_llama_cpp" | "ollama" | "openai_compatible";
 export type ModelStatus =
   | "stopped"
   | "starting"
@@ -106,6 +106,7 @@ export interface CreateModelRequest {
   provider: ProviderType;
   name: string;
   model_path: string;
+  llama_server_path?: string | null;
   port: number;
   host: string;
   modality: "llm" | "vlm";

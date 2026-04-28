@@ -4,10 +4,12 @@ import asyncio
 import csv
 import json
 import logging
+import os
 import socket
 import subprocess
 import re
 import shlex
+import shutil
 import threading
 import sys
 import tempfile
@@ -48,6 +50,7 @@ from app.services.process_service import ProcessExitEvent, ProcessService
 from app.utils.command_builder import build_command
 
 logger = logging.getLogger(__name__)
+LLAMA_CPP_PROVIDERS = {ProviderType.WSL_LLAMA_CPP, ProviderType.WINDOWS_LLAMA_CPP}
 
 
 class ModelService:
@@ -105,7 +108,7 @@ class ModelService:
         discovered: list[DiscoveredModelArtifact] = []
         seen: set[str] = set()
 
-        for artifact in [*self._discover_wsl_models("Ubuntu", limit), *self._discover_windows_models(limit)]:
+        for artifact in [*self._discover_wsl_models("Ubuntu", limit), *self._discover_windows_models(limit, query)]:
             key = artifact.launch_path.lower()
             if key in seen or key in existing_paths or artifact.file_name.lower() in existing_paths:
                 continue
@@ -124,14 +127,20 @@ class ModelService:
         return discovered
 
     def create_model(self, payload: CreateModelRequest) -> ModelView:
-        if payload.provider != ProviderType.WSL_LLAMA_CPP:
-            raise BadRequestError("Automatic model creation currently supports llama.cpp in WSL.")
+        if payload.provider not in LLAMA_CPP_PROVIDERS:
+            raise BadRequestError("Automatic model creation supports local llama.cpp models. Use Ollama/OpenAI-compatible entries from config for external endpoints.")
 
         model_id = self._unique_model_id(self._slugify(payload.name))
         endpoint = f"http://{payload.host}:{payload.port}"
-        family = payload.family or self._family_from_filename(PurePosixPath(payload.model_path).name)
-        quantization = payload.quantization or self._quantization_from_filename(PurePosixPath(payload.model_path).name)
-        size_label = payload.size_label or self._size_from_filename(PurePosixPath(payload.model_path).name)
+        file_name = self._file_name_from_path(payload.model_path)
+        family = payload.family or self._family_from_filename(file_name)
+        quantization = payload.quantization or self._quantization_from_filename(file_name)
+        size_label = payload.size_label or self._size_from_filename(file_name)
+        llama_server_path = (
+            payload.llama_server_path or self._detect_windows_llama_server_path()
+            if payload.provider == ProviderType.WINDOWS_LLAMA_CPP
+            else ""
+        )
         profile = ProfileConfig(
             id="balanced",
             name="Balanced",
@@ -154,7 +163,7 @@ class ModelService:
             name=payload.name,
             provider=payload.provider,
             modality=payload.modality,
-            description=payload.description or f"Local llama.cpp model from {PurePosixPath(payload.model_path).name}.",
+            description=payload.description or f"Local llama.cpp model from {file_name}.",
             endpoint=endpoint,
             health_url=f"{endpoint}/health",
             metadata={
@@ -165,10 +174,23 @@ class ModelService:
                 "engine": "llama.cpp",
                 "model_path": payload.model_path,
                 "quantization": quantization or "custom",
+                "llama_server_path": llama_server_path,
                 "wsl_distro": payload.wsl_distro,
                 "tags": ["local", "imported"],
             },
-            launch=LaunchConfig(
+            launch=self._build_local_llama_launch(payload),
+            profiles=[profile],
+            active_profile_id=profile.id,
+            settings=ModelSettings(),
+            log_path=f"backend/logs/{model_id}.log",
+        )
+        created = self.config_service.create_model(model)
+        self.sync_runtime_catalog()
+        return self._compose_model_view(created)
+
+    def _build_local_llama_launch(self, payload: CreateModelRequest) -> LaunchConfig:
+        if payload.provider == ProviderType.WSL_LLAMA_CPP:
+            return LaunchConfig(
                 managed=True,
                 command=[
                     "wsl",
@@ -197,15 +219,33 @@ class ModelService:
                 environment={"LLAMA_LOG_COLORS": "0"},
                 shell=False,
                 ready_timeout_seconds=120,
-            ),
-            profiles=[profile],
-            active_profile_id=profile.id,
-            settings=ModelSettings(),
-            log_path=f"backend/logs/{model_id}.log",
+            )
+
+        llama_server_path = payload.llama_server_path or self._detect_windows_llama_server_path()
+        working_dir = None
+        try:
+            executable_path = Path(llama_server_path)
+            if executable_path.is_absolute() and executable_path.exists():
+                working_dir = str(executable_path.parent)
+        except OSError:
+            working_dir = None
+
+        return LaunchConfig(
+            managed=True,
+            command=[
+                (
+                    '"{llama_server_path}" -m "{model_path}" --host {host} --port {port} '
+                    "--ctx-size {context_size} --batch-size {batch_size} --ubatch-size {ubatch_size} "
+                    "--temp {temperature} --top-p {top_p} --top-k {top_k} --min-p {min_p} "
+                    "{cache_args} {extra_args}"
+                )
+            ],
+            stop_command=None,
+            working_dir=working_dir,
+            environment={"LLAMA_LOG_COLORS": "0"},
+            shell=True,
+            ready_timeout_seconds=120,
         )
-        created = self.config_service.create_model(model)
-        self.sync_runtime_catalog()
-        return self._compose_model_view(created)
 
     async def start_model(self, model_id: str) -> ModelView:
         model = self.config_service.get_model(model_id)
@@ -235,6 +275,8 @@ class ModelService:
                 runtime.details["launch_command"] = " ".join(build_command(model, profile))
                 if profile:
                     runtime.details["launch_params"] = profile.model_dump_json()
+                if model.provider == ProviderType.WINDOWS_LLAMA_CPP:
+                    self._validate_windows_llama_cpp_launch(model)
                 pid, log_path = self.process_service.start(model, profile)
                 runtime.pid = pid
                 self.log_service.append_event(model.id, f"Process started with pid={pid}", model.log_path)
@@ -970,14 +1012,14 @@ class ModelService:
         end_progress: float,
     ) -> None:
         started = time.perf_counter()
-        if model.provider != ProviderType.WSL_LLAMA_CPP or not model.launch.managed or not model.settings.allow_start_stop:
+        if model.provider not in LLAMA_CPP_PROVIDERS or not model.launch.managed or not model.settings.allow_start_stop:
             self._add_benchmark_stage(
                 run_id,
                 BenchmarkStageResult(
                     name="autotune restart sweep",
                     ok=False,
                     duration_ms=0.0,
-                    error="Restart-per-config sweep requires a managed WSL llama.cpp model.",
+                    error="Restart-per-config sweep requires a managed local llama.cpp model.",
                 ),
                 start_progress,
             )
@@ -1201,6 +1243,8 @@ class ModelService:
         runtime.details["benchmark_temporary_profile"] = True
 
         try:
+            if model.provider == ProviderType.WINDOWS_LLAMA_CPP:
+                self._validate_windows_llama_cpp_launch(model)
             pid, log_path = self.process_service.start(model, profile)
             runtime.pid = pid
             runtime.details["log_path"] = log_path
@@ -2722,6 +2766,34 @@ class ModelService:
             raise RuntimeError(f"Ollama unload failed with HTTP {response.status_code}")
         self.log_service.append_event(model.id, f"Ollama unload requested for {target_name}.", model.log_path)
 
+    def _validate_windows_llama_cpp_launch(self, model: ModelConfig) -> None:
+        profile = model.get_active_profile()
+        model_path = str((profile.model_path if profile and profile.model_path else model.metadata.get("model_path", "")) or "")
+        if not model_path:
+            raise RuntimeError("Windows llama.cpp model has no GGUF path configured.")
+
+        model_file = Path(os.path.expandvars(model_path)).expanduser()
+        if not model_file.exists():
+            raise RuntimeError(
+                f"GGUF file was not found at '{model_path}'. If it is on another drive, paste the Windows path like D:\\Models\\model.gguf."
+            )
+
+        llama_server_path = str(model.metadata.get("llama_server_path", "") or "llama-server.exe")
+        expanded = os.path.expandvars(llama_server_path).strip().strip("\"'")
+        looks_like_path = "\\" in expanded or "/" in expanded or re.match(r"^[A-Za-z]:", expanded)
+        if looks_like_path:
+            if not Path(expanded).expanduser().exists():
+                raise RuntimeError(
+                    f"llama-server.exe was not found at '{llama_server_path}'. Set the correct path in Add Model or LLAMA_SERVER_PATH."
+                )
+            return
+
+        if shutil.which(expanded) is None:
+            raise RuntimeError(
+                "llama-server.exe was not found on PATH. Install a Windows llama.cpp build, add it to PATH, "
+                "or set the llama-server.exe field when adding the model."
+            )
+
     def _configured_model_paths(self) -> set[str]:
         paths: set[str] = set()
         for model in self.config_service.list_models():
@@ -2729,11 +2801,11 @@ class ModelService:
             if model_path:
                 model_path_text = str(model_path)
                 paths.add(model_path_text.lower())
-                paths.add(PurePosixPath(model_path_text).name.lower())
+                paths.add(self._file_name_from_path(model_path_text).lower())
             for profile in model.profiles:
                 if profile.model_path:
                     paths.add(profile.model_path.lower())
-                    paths.add(PurePosixPath(profile.model_path).name.lower())
+                    paths.add(self._file_name_from_path(profile.model_path).lower())
         return paths
 
     def _discover_wsl_models(self, distro: str, limit: int) -> list[DiscoveredModelArtifact]:
@@ -2767,27 +2839,85 @@ class ModelService:
             artifacts.append(self._artifact_from_path("wsl", path, path, int(size_raw) if size_raw.isdigit() else None))
         return artifacts
 
-    def _discover_windows_models(self, limit: int) -> list[DiscoveredModelArtifact]:
-        roots = [
-            Path.home() / "llm" / "models",
-            Path.home() / "models",
-            Path.home() / "Documents" / "models",
-        ]
+    def _discover_windows_models(self, limit: int, query: str | None = None) -> list[DiscoveredModelArtifact]:
+        roots = self._windows_model_roots(query)
         artifacts: list[DiscoveredModelArtifact] = []
+        seen: set[str] = set()
+
         for root in roots:
             if not root.exists():
                 continue
             try:
-                for path in root.rglob("*.gguf"):
+                if root.is_file():
+                    candidates = [root] if root.suffix.lower() == ".gguf" else []
+                else:
+                    candidates = root.rglob("*.gguf")
+                for path in candidates:
                     if not path.is_file():
                         continue
-                    launch_path = self._windows_path_to_wsl(path)
-                    artifacts.append(self._artifact_from_path("windows", str(path), launch_path, path.stat().st_size))
+                    resolved = str(path.resolve())
+                    key = resolved.lower()
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    artifacts.append(self._artifact_from_path("windows", resolved, resolved, path.stat().st_size))
                     if len(artifacts) >= limit:
                         return artifacts
             except OSError:
                 continue
         return artifacts
+
+    def _windows_model_roots(self, query: str | None = None) -> list[Path]:
+        roots: list[Path] = []
+        query_text = (query or "").strip().strip("\"'")
+        if query_text:
+            try:
+                query_path = Path(os.path.expandvars(query_text)).expanduser()
+                if query_path.exists():
+                    roots.append(query_path)
+            except OSError:
+                pass
+
+        env_roots = os.environ.get("QUOKKA_MODEL_ROOTS", "")
+        for raw_root in env_roots.split(";"):
+            root = raw_root.strip().strip("\"'")
+            if root:
+                roots.append(Path(os.path.expandvars(root)).expanduser())
+
+        roots.extend(
+            [
+            Path.home() / "llm" / "models",
+            Path.home() / "models",
+            Path.home() / "Documents" / "models",
+            Path.home() / "Downloads",
+            ]
+        )
+
+        if os.name == "nt":
+            for letter in "DEFGHIJKLMNOPQRSTUVWXYZC":
+                drive_root = Path(f"{letter}:/")
+                if not drive_root.exists():
+                    continue
+                roots.extend(
+                    [
+                        drive_root / "llm" / "models",
+                        drive_root / "models",
+                        drive_root / "Models",
+                        drive_root / "AI" / "models",
+                        drive_root / "LLM" / "models",
+                        drive_root / "Downloads",
+                    ]
+                )
+
+        deduped: list[Path] = []
+        seen: set[str] = set()
+        for root in roots:
+            key = str(root).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(root)
+        return deduped
 
     def _artifact_from_path(
         self,
@@ -2796,12 +2926,13 @@ class ModelService:
         launch_path: str,
         size_bytes: int | None,
     ) -> DiscoveredModelArtifact:
-        file_name = PurePosixPath(path).name if "/" in path else PureWindowsPath(path).name
+        file_name = self._file_name_from_path(path)
         family = self._family_from_filename(file_name)
         quantization = self._quantization_from_filename(file_name)
         size_label = self._size_from_filename(file_name)
         suggested_name = " ".join(item for item in [family, quantization] if item) or file_name.removesuffix(".gguf")
         return DiscoveredModelArtifact(
+            provider=ProviderType.WSL_LLAMA_CPP if source == "wsl" else ProviderType.WINDOWS_LLAMA_CPP,
             source=source,
             path=path,
             launch_path=launch_path,
@@ -2822,6 +2953,37 @@ class ModelService:
             return resolved.as_posix()
         rest = "/".join(resolved.parts[1:])
         return f"/mnt/{drive}/{rest}"
+
+    @staticmethod
+    def _file_name_from_path(path: str) -> str:
+        return PureWindowsPath(path).name if "\\" in path or re.match(r"^[A-Za-z]:", path) else PurePosixPath(path).name
+
+    @staticmethod
+    def _detect_windows_llama_server_path() -> str:
+        env_path = os.environ.get("LLAMA_SERVER_PATH", "").strip().strip("\"'")
+        if env_path:
+            return env_path
+
+        for executable in ("llama-server.exe", "llama-server"):
+            found = shutil.which(executable)
+            if found:
+                return found
+
+        home = Path.home()
+        candidates = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "llama.cpp" / "llama-server.exe",
+            home / "llm" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
+            home / "llm" / "llama.cpp" / "build" / "bin" / "llama-server.exe",
+            home / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
+            home / "llama.cpp" / "build" / "bin" / "llama-server.exe",
+        ]
+        for candidate in candidates:
+            try:
+                if candidate.exists():
+                    return str(candidate)
+            except OSError:
+                continue
+        return "llama-server.exe"
 
     def _extract_artifact_info(self, model: ModelConfig) -> ModelArtifactInfo:
         if model.provider == ProviderType.OLLAMA:
@@ -2844,7 +3006,7 @@ class ModelService:
                 source="unknown",
             )
 
-        file_name = PurePosixPath(path).name if "/" in path else PureWindowsPath(path).name
+        file_name = self._file_name_from_path(path)
         return ModelArtifactInfo(
             file_name=file_name,
             path=path,
@@ -2856,9 +3018,9 @@ class ModelService:
 
     @staticmethod
     def _extract_model_path(command: str) -> str | None:
-        match = re.search(r"(?:^|\s)-m\s+([^\s]+\.gguf)", command)
+        match = re.search(r"(?:^|\s)-m\s+(?:\"([^\"]+\.gguf)\"|'([^']+\.gguf)'|([^\s]+\.gguf))", command)
         if match:
-            return match.group(1).strip("\"'")
+            return next(group for group in match.groups() if group).strip("\"'")
         return None
 
     @staticmethod

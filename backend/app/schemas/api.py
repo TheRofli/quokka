@@ -35,7 +35,7 @@ class ModelArtifactInfo(BaseModel):
 
 
 class DiscoveredModelArtifact(BaseModel):
-    provider: ProviderType = ProviderType.WSL_LLAMA_CPP
+    provider: ProviderType = ProviderType.WINDOWS_LLAMA_CPP
     source: str
     path: str
     launch_path: str
@@ -50,9 +50,10 @@ class DiscoveredModelArtifact(BaseModel):
 
 
 class CreateModelRequest(BaseModel):
-    provider: ProviderType = ProviderType.WSL_LLAMA_CPP
+    provider: ProviderType = ProviderType.WINDOWS_LLAMA_CPP
     name: str
     model_path: str
+    llama_server_path: str | None = None
     port: int = Field(default=8080, ge=1, le=65535)
     host: str = "127.0.0.1"
     modality: str = "llm"
