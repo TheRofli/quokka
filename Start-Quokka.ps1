@@ -174,14 +174,23 @@ if ($SetupOnly) {
 
 Stop-ExistingQuokka
 
-$Node = Join-Path $env:ProgramFiles "nodejs\node.exe"
-if (-not (Test-Path $Node)) {
-    $Node = "node"
-}
-
 Write-Host "Starting Quokka..."
-$ElectronCli = Join-Path $Desktop "node_modules\electron\cli.js"
-$ElectronArguments = "`"$ElectronCli`" `"$Desktop`""
-Start-Process -FilePath $Node `
-    -ArgumentList $ElectronArguments `
-    -WorkingDirectory $Desktop
+$ElectronExe = Join-Path $Desktop "node_modules\electron\dist\electron.exe"
+if (Test-Path $ElectronExe) {
+    Start-Process -FilePath $ElectronExe `
+        -ArgumentList "`"$Desktop`"" `
+        -WorkingDirectory $Desktop
+}
+else {
+    $Node = Join-Path $env:ProgramFiles "nodejs\node.exe"
+    if (-not (Test-Path $Node)) {
+        $Node = "node"
+    }
+
+    $ElectronCli = Join-Path $Desktop "node_modules\electron\cli.js"
+    $ElectronArguments = "`"$ElectronCli`" `"$Desktop`""
+    Start-Process -FilePath $Node `
+        -ArgumentList $ElectronArguments `
+        -WorkingDirectory $Desktop `
+        -WindowStyle Hidden
+}
