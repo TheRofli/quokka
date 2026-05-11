@@ -65,12 +65,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 async function streamRequest<TPayload>(
   path: string,
   payload: TPayload,
-  onEvent: (event: ChatStreamEvent) => void
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok) {
@@ -145,8 +147,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  streamChatCompletion: (payload: ChatCompletionRequest, onEvent: (event: ChatStreamEvent) => void) =>
-    streamRequest("/chat/completion/stream", payload, onEvent),
+  streamChatCompletion: (payload: ChatCompletionRequest, onEvent: (event: ChatStreamEvent) => void, signal?: AbortSignal) =>
+    streamRequest("/chat/completion/stream", payload, onEvent, signal),
   getMetricHistory: (minutes = 60) => request<MetricHistoryPoint[]>(`/system/metrics/history?minutes=${minutes}`),
   getModels: () => request<ModelView[]>("/models"),
   discoverModels: (query = "", limit = 80) =>

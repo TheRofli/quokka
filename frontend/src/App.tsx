@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { AlertTriangle, DownloadCloud, FlaskConical, MessageSquare, PanelLeft, Settings, Sparkles } from "lucide-react";
 
 import { ControlPanel } from "@/components/control/control-panel";
+import { EmptyState } from "@/components/app/empty-state";
+import { PageShell } from "@/components/app/page-shell";
 import { TopStatusBar } from "@/components/app/top-status-bar";
 import { AddModelDialog } from "@/components/dashboard/add-model-dialog";
 import type { MetricId } from "@/components/dashboard/metric-detail-dialog";
@@ -66,8 +68,8 @@ const settingsSections = [
 
 function LazyPanelFallback({ label }: { label: string }) {
   return (
-    <div className="rounded-lg border border-line bg-white/[0.025] px-5 py-5 text-sm text-milk/45">
-      {label}
+    <div className="mt-4 min-h-0 flex-1 overflow-hidden rounded-[var(--radius-soft)] border border-line/70 bg-panel/55">
+      <EmptyState icon={Sparkles} eyebrow="Loading" title={label} body="Quokka is preparing this workspace." />
     </div>
   );
 }
@@ -181,9 +183,150 @@ function App() {
   };
 
   const llamaRuntimeBusy = llamaRuntime?.status === "queued" || llamaRuntime?.status === "downloading" || llamaRuntime?.status === "extracting";
+  const settingsCenter = (
+    <div className="px-5 py-5">
+      <div className="max-w-6xl">
+        <p className="text-xs uppercase tracking-[0.24em] text-accent">Settings</p>
+        <h1 className="mt-2 text-2xl font-semibold text-milk">Control Center</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
+          Tune Quokka's local control room: appearance, runtime setup, chat defaults, model library, updates, and diagnostics.
+        </p>
+
+        <section className="mt-6">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-accent">Appearance</p>
+              <h2 className="mt-2 text-xl font-semibold text-milk">Theme Studio</h2>
+            </div>
+            <span className="hidden text-xs text-milk/38 md:inline">Applies instantly on this machine</span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+            {themes.map((theme) => (
+              <button
+                key={theme.id}
+                type="button"
+                title={theme.description}
+                onClick={() => setThemeId(theme.id)}
+                className={`min-h-[104px] rounded-[var(--radius-control)] border px-4 py-4 text-left transition-colors ${
+                  themeId === theme.id
+                    ? "border-accent bg-accent/12 text-milk"
+                    : "border-line/70 bg-shell/42 text-milk/68 hover:border-accent/35 hover:bg-white/[0.055]"
+                }`}
+              >
+                <div className="flex h-full items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-milk">{theme.name}</p>
+                    <p className="mt-2 text-sm leading-5 text-milk/48">{theme.description}</p>
+                  </div>
+                  <span className={themeId === theme.id ? "text-accent" : "text-milk/25"}>{themeId === theme.id ? "active" : "preview"}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <p className="text-xs uppercase tracking-[0.24em] text-accent">Control Surface</p>
+          <h2 className="mt-2 text-xl font-semibold text-milk">Upcoming Settings</h2>
+          <div className="mt-4 divide-y divide-line/55 overflow-hidden rounded-[var(--radius-control)] border border-line/65 bg-shell/34">
+            {settingsSections.map((section) => (
+              <div key={section.title} className="grid gap-3 px-4 py-4 md:grid-cols-[170px_minmax(0,1fr)]" title={section.body}>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-milk/35">{section.eyebrow}</p>
+                <div>
+                  <p className="font-semibold text-milk">{section.title}</p>
+                  <p className="mt-1 text-sm leading-6 text-milk/48">{section.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+
+  const settingsRight = (
+    <div className="px-5 py-5">
+      <div className="rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.24em] text-accent">Update Center</p>
+        <h2 className="mt-2 text-xl font-semibold text-milk">Quokka {updateStatus?.current_version?.split("+")[0] ?? "0.2.0"}</h2>
+        <p className="mt-2 text-sm leading-6 text-milk/52">{updateStatus?.message ?? "Checking for updates..."}</p>
+        <div className="mt-4 grid gap-2 text-sm text-milk/55">
+          <span>Install type: {updateStatus?.source_install ? "GitHub source" : "Desktop installer"}</span>
+          <span>Latest: {updateStatus?.latest_version ?? "--"}</span>
+          <span>Checked: {updateStatus ? formatTimestamp(updateStatus.checked_at) : "Pending"}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => void runUpdate()}
+          className="quokka-control mt-4 w-full px-3 py-2 text-sm font-semibold text-live hover:border-live/60"
+        >
+          {updateStatus?.update_available ? "Update Quokka" : "Check update path"}
+        </button>
+      </div>
+
+      <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.24em] text-accent">Install Commands</p>
+        <p className="mt-2 text-sm leading-6 text-milk/52">Source installs update fastest. Desktop installer updates require a GitHub Release asset.</p>
+        <div className="mt-4 space-y-3">
+          {[
+            { label: "Install", command: "irm https://raw.githubusercontent.com/TheRofli/Quokka/main/install.ps1 | iex" },
+            { label: "Open", command: "quokka" },
+            { label: "Update", command: "quokka update" },
+          ].map((item) => (
+            <div key={item.label} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/42 px-3 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/38">{item.label}</p>
+              <code className="mt-2 block break-all font-mono text-xs leading-5 text-milk/70">{item.command}</code>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.24em] text-accent">Windows Runtime</p>
+        <p className="mt-2 text-sm leading-6 text-milk/52">GGUF + Windows llama.cpp is the default path. Use Model Library to download, then Add Model to preflight.</p>
+        <div className="mt-4 rounded-[var(--radius-control)] border border-line/60 bg-panel/42 px-3 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-milk">llama.cpp</p>
+            <span className="quokka-pill px-2 py-1 text-xs text-milk/55">{llamaRuntime?.status ?? "checking"}</span>
+          </div>
+          <p className="mt-2 text-sm leading-5 text-milk/50">{llamaRuntime?.error ?? llamaRuntime?.message ?? "Checking local runtime..."}</p>
+          {llamaRuntimeBusy ? (
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-full rounded-full bg-live" style={{ width: `${Math.max(3, llamaRuntime?.progress_percent ?? 0)}%` }} />
+            </div>
+          ) : null}
+          {llamaRuntime?.llama_server_path ? <p className="mt-2 break-all font-mono text-[11px] leading-5 text-live/70">{llamaRuntime.llama_server_path}</p> : null}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void installLlamaCpp("cpu")}
+            disabled={llamaRuntimeBusy}
+            className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            Install CPU
+          </button>
+          <button
+            type="button"
+            onClick={() => void installLlamaCpp("cuda")}
+            disabled={llamaRuntimeBusy}
+            className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-live disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            Install CUDA
+          </button>
+          <button type="button" onClick={() => setMode("library")} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
+            Open Library
+          </button>
+          <button type="button" onClick={() => setAddModelOpen(true)} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
+            Add Model
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="h-screen overflow-hidden bg-shell text-milk">
+    <div className="quokka-page h-screen overflow-hidden bg-shell text-milk">
       <div className="relative flex h-screen w-full overflow-hidden">
         {!sidebarOpen ? (
           <button
@@ -346,149 +489,11 @@ function App() {
 
         {mode === "library" ? (
           <Suspense fallback={<LazyPanelFallback label="Loading Model Library..." />}>
-            <ModelLibrary models={models} onAdded={refreshDashboard} />
+            <ModelLibrary models={models} metrics={metrics} onAdded={refreshDashboard} />
           </Suspense>
         ) : null}
 
-        {mode === "settings" ? (
-          <main className="mt-4 grid min-h-0 flex-1 overflow-hidden rounded-[var(--radius-soft)] border border-line bg-panel/55 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <section className="min-h-0 overflow-y-auto px-5 py-5">
-              <div className="max-w-6xl">
-                <p className="text-xs uppercase tracking-[0.24em] text-accent">Settings</p>
-                <h1 className="mt-2 text-2xl font-semibold text-milk">Theme Studio</h1>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
-                  Pick a local interface theme. It is saved on this machine and applies immediately without restarting Quokka.
-                </p>
-                <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                  {themes.map((theme) => (
-                    <button
-                      key={theme.id}
-                      type="button"
-                      title={theme.description}
-                      onClick={() => setThemeId(theme.id)}
-                      className={`min-h-[104px] rounded-[var(--radius-control)] border px-4 py-4 text-left transition-colors ${
-                        themeId === theme.id
-                          ? "border-accent bg-accent/12 text-milk"
-                          : "border-line bg-shell/42 text-milk/68 hover:border-accent/35 hover:bg-white/[0.055]"
-                      }`}
-                    >
-                      <div className="flex h-full items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="font-semibold text-milk">{theme.name}</p>
-                          <p className="mt-2 text-sm leading-5 text-milk/48">{theme.description}</p>
-                        </div>
-                        <span className={themeId === theme.id ? "text-accent" : "text-milk/25"}>{themeId === theme.id ? "active" : "preview"}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                <div className="mt-8">
-                  <p className="text-xs uppercase tracking-[0.24em] text-accent">Control Surface</p>
-                  <h2 className="mt-2 text-xl font-semibold text-milk">Upcoming Settings</h2>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                    {settingsSections.map((section) => (
-                      <div
-                        key={section.title}
-                        className="rounded-[var(--radius-control)] border border-line bg-shell/38 px-4 py-4"
-                        title={section.body}
-                      >
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-milk/35">{section.eyebrow}</p>
-                        <p className="mt-2 font-semibold text-milk">{section.title}</p>
-                        <p className="mt-2 text-sm leading-6 text-milk/48">{section.body}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <aside className="min-h-0 overflow-y-auto border-t border-line/70 bg-shell/35 px-5 py-5 xl:border-l xl:border-t-0">
-              <div className="rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-accent">Update Center</p>
-                <h2 className="mt-2 text-xl font-semibold text-milk">Quokka {updateStatus?.current_version?.split("+")[0] ?? "0.2.0"}</h2>
-                <p className="mt-2 text-sm leading-6 text-milk/52">{updateStatus?.message ?? "Checking for updates..."}</p>
-                <div className="mt-4 grid gap-2 text-sm text-milk/55">
-                  <span>Install type: {updateStatus?.source_install ? "GitHub source" : "Desktop installer"}</span>
-                  <span>Latest: {updateStatus?.latest_version ?? "--"}</span>
-                  <span>Checked: {updateStatus ? formatTimestamp(updateStatus.checked_at) : "Pending"}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void runUpdate()}
-                  className="quokka-control mt-4 w-full px-3 py-2 text-sm font-semibold text-live hover:border-live/60"
-                >
-                  {updateStatus?.update_available ? "Update Quokka" : "Check update path"}
-                </button>
-              </div>
-
-              <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-accent">Install Commands</p>
-                <p className="mt-2 text-sm leading-6 text-milk/52">
-                  Source installs update fastest. Desktop installer updates require a GitHub Release asset.
-                </p>
-                <div className="mt-4 space-y-3">
-                  {[
-                    { label: "Install", command: "irm https://raw.githubusercontent.com/TheRofli/Quokka/main/install.ps1 | iex" },
-                    { label: "Open", command: "quokka" },
-                    { label: "Update", command: "quokka update" },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/42 px-3 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/38">{item.label}</p>
-                      <code className="mt-2 block break-all font-mono text-xs leading-5 text-milk/70">{item.command}</code>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-accent">Windows Runtime</p>
-                <p className="mt-2 text-sm leading-6 text-milk/52">
-                  GGUF + Windows llama.cpp is the default path. Use Model Library to download, then Add Model to preflight.
-                </p>
-                <div className="mt-4 rounded-[var(--radius-control)] border border-line/60 bg-panel/42 px-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-milk">llama.cpp</p>
-                    <span className="quokka-pill px-2 py-1 text-xs text-milk/55">{llamaRuntime?.status ?? "checking"}</span>
-                  </div>
-                  <p className="mt-2 text-sm leading-5 text-milk/50">
-                    {llamaRuntime?.error ?? llamaRuntime?.message ?? "Checking local runtime..."}
-                  </p>
-                  {llamaRuntimeBusy ? (
-                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
-                      <div className="h-full rounded-full bg-live" style={{ width: `${Math.max(3, llamaRuntime?.progress_percent ?? 0)}%` }} />
-                    </div>
-                  ) : null}
-                  {llamaRuntime?.llama_server_path ? <p className="mt-2 break-all font-mono text-[11px] leading-5 text-live/70">{llamaRuntime.llama_server_path}</p> : null}
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void installLlamaCpp("cpu")}
-                    disabled={llamaRuntimeBusy}
-                    className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Install CPU
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void installLlamaCpp("cuda")}
-                    disabled={llamaRuntimeBusy}
-                    className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-live disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    Install CUDA
-                  </button>
-                  <button type="button" onClick={() => setMode("library")} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
-                    Open Library
-                  </button>
-                  <button type="button" onClick={() => setAddModelOpen(true)} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
-                    Add Model
-                  </button>
-                </div>
-              </div>
-            </aside>
-          </main>
-        ) : null}
+        {mode === "settings" ? <PageShell center={settingsCenter} right={settingsRight} /> : null}
 
         {mode === "control" ? (
           <ControlPanel

@@ -5,10 +5,11 @@ import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatNumber } from "@/lib/utils";
-import type { CreateModelRequest, ModelDownloadStatus, ModelLibraryEntry, ModelLibraryFile, ModelView } from "@/types/api";
+import type { CreateModelRequest, ModelDownloadStatus, ModelLibraryEntry, ModelLibraryFile, ModelView, SystemMetricsResponse } from "@/types/api";
 
 interface ModelLibraryProps {
   models: ModelView[];
+  metrics?: SystemMetricsResponse | null;
   onAdded: () => Promise<void>;
 }
 
@@ -36,6 +37,31 @@ function bytesToLabel(bytes?: number | null) {
     return "--";
   }
   return `${formatNumber(bytes / 1024 / 1024 / 1024, 2)} GB`;
+}
+
+function bytesToGb(bytes?: number | null) {
+  return bytes ? bytes / 1024 / 1024 / 1024 : null;
+}
+
+function estimateVramGb(file: ModelLibraryFile) {
+  const sizeGb = bytesToGb(file.size_bytes);
+  if (!sizeGb) {
+    return null;
+  }
+  return sizeGb * 1.18 + 0.8;
+}
+
+function fitLabel(estimatedVramGb: number | null, gpuTotalGb?: number | null) {
+  if (!estimatedVramGb || !gpuTotalGb) {
+    return { label: "VRAM unknown", tone: "text-milk/42" };
+  }
+  if (estimatedVramGb <= gpuTotalGb * 0.86) {
+    return { label: "Fits GPU", tone: "text-success" };
+  }
+  if (estimatedVramGb <= gpuTotalGb * 1.08) {
+    return { label: "Tight fit", tone: "text-warning" };
+  }
+  return { label: "CPU/offload", tone: "text-milk/45" };
 }
 
 function nameFromPath(path: string) {
@@ -70,7 +96,16 @@ function payloadFromDownload(download: ModelDownloadStatus, models: ModelView[])
   };
 }
 
-export function ModelLibrary({ models, onAdded }: ModelLibraryProps) {
+const categoryPresets = [
+  { label: "Recommended", query: "qwen coder gguf q4_k_m", hint: "Coding models that usually fit 8-16GB GPUs." },
+  { label: "Small/Fast", query: "gemma 4b gguf q4", hint: "Quick chat and assistant models." },
+  { label: "Coding", query: "devstral qwen coder gguf", hint: "Code-focused local models." },
+  { label: "Chat", query: "llama instruct gguf q4_k_m", hint: "General conversation models." },
+  { label: "Vision", query: "llava gguf mmproj", hint: "Vision models need an mmproj file too." },
+  { label: "CPU only", query: "3b gguf q4_0", hint: "Tiny models for machines without CUDA." },
+];
+
+export function ModelLibrary({ models, metrics, onAdded }: ModelLibraryProps) {
   const [query, setQuery] = useState("gemma gguf");
   const [manualReference, setManualReference] = useState("");
   const [targetDir, setTargetDir] = useState("");
@@ -82,6 +117,8 @@ export function ModelLibrary({ models, onAdded }: ModelLibraryProps) {
   const [error, setError] = useState<string | null>(null);
 
   const activeDownloads = useMemo(() => downloads.filter((item) => item.status === "queued" || item.status === "downloading"), [downloads]);
+  const primaryGpu = metrics?.gpu_devices?.[0] ?? null;
+  const gpuTotalGb = primaryGpu?.memory_total_mb ? primaryGpu.memory_total_mb / 1024 : metrics?.gpu_memory_total_mb ? metrics.gpu_memory_total_mb / 1024 : null;
 
   useEffect(() => {
     void api.getFeaturedLibraryModels().then(setFeatured).catch(() => setFeatured([]));
@@ -187,6 +224,11 @@ export function ModelLibrary({ models, onAdded }: ModelLibraryProps) {
             Search Hugging Face, paste a model URL, download GGUF files, then add them to Quokka's Windows llama.cpp runtime.
           </p>
         </div>
+        <div className="rounded-[var(--radius-control)] border border-line/65 bg-shell/45 px-4 py-3 text-sm text-milk/58">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">Your GPU fit</p>
+          <p className="mt-1 font-semibold text-milk">{primaryGpu?.name ?? "GPU not detected"}</p>
+          <p className="mt-1">{gpuTotalGb ? `${formatNumber(gpuTotalGb, 1)} GB VRAM available for fit estimates` : "Download cards will still show file size."}</p>
+        </div>
         <Button variant="secondary" className="quokka-control rounded-[var(--radius-control)]" onClick={chooseDownloadFolder}>
           <FolderOpen className="h-4 w-4" />
           {targetDir ? "Change folder" : "Download folder"}
@@ -202,6 +244,20 @@ export function ModelLibrary({ models, onAdded }: ModelLibraryProps) {
               <Button variant="primary" size="icon" onClick={() => void runSearch()} disabled={isSearching}>
                 {isSearching ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
               </Button>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {categoryPresets.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className="rounded-[var(--radius-control)] border border-line/55 bg-panel/35 px-3 py-2 text-left transition hover:border-live/45 hover:bg-live/8"
+                  onClick={() => void runSearch(preset.query)}
+                  title={preset.hint}
+                >
+                  <span className="text-sm font-semibold text-milk">{preset.label}</span>
+                  <span className="mt-0.5 block text-xs text-milk/42">{preset.hint}</span>
+                </button>
+              ))}
             </div>
             <div className="mt-4 space-y-2">
               {featured.map((item) => (
@@ -252,13 +308,22 @@ export function ModelLibrary({ models, onAdded }: ModelLibraryProps) {
                 </div>
                 <div className="mt-4 space-y-2">
                   {entry.files.map((file) => (
-                    <div key={file.filename} className="grid gap-3 rounded-[var(--radius-control)] border border-line/55 bg-panel/40 px-3 py-3 md:grid-cols-[1fr_90px_90px_120px] md:items-center">
+                    <div key={file.filename} className="grid gap-3 rounded-[var(--radius-control)] border border-line/55 bg-panel/40 px-3 py-3 md:grid-cols-[1fr_90px_90px_120px_138px] md:items-center">
                       <span className="break-all font-mono text-sm text-milk/78">{file.filename}</span>
                       <span className="text-sm text-accent">{file.quantization ?? "GGUF"}</span>
                       <span className="text-sm text-milk/45">{bytesToLabel(file.size_bytes)}</span>
+                      {(() => {
+                        const vramGb = estimateVramGb(file);
+                        const fit = fitLabel(vramGb, gpuTotalGb);
+                        return (
+                          <span className={cn("text-sm", fit.tone)} title="Approximate VRAM need: file size plus runtime overhead. Test Launch is still the source of truth.">
+                            {vramGb ? `~${formatNumber(vramGb, 1)} GB` : "--"} · {fit.label}
+                          </span>
+                        );
+                      })()}
                       <Button variant="primary" size="sm" className="rounded-[var(--radius-control)]" onClick={() => void downloadFile(entry, file)}>
                         <Download className="h-4 w-4" />
-                        Download
+                        Download GGUF
                       </Button>
                     </div>
                   ))}

@@ -3,6 +3,7 @@ import {
   Bot,
   BrainCircuit,
   ChevronDown,
+  Download,
   FileText,
   Image,
   MessageSquarePlus,
@@ -13,6 +14,7 @@ import {
   Plus,
   Send,
   Sparkles,
+  Square,
   Trash2,
   Wand2,
   X,
@@ -369,6 +371,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
   const [webSearchResults, setWebSearchResults] = useState(3);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
   const sessionModel = models.find((model) => model.id === activeSession?.modelId) ?? null;
@@ -492,6 +495,35 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
     });
   };
 
+  const exportActiveChat = () => {
+    if (!activeSession) {
+      return;
+    }
+    const lines = [
+      `# ${activeSession.title}`,
+      "",
+      `Model: ${selectedModel?.name ?? "Unknown"}`,
+      `Exported: ${new Date().toLocaleString()}`,
+      "",
+      ...activeSession.messages.flatMap((message) => [
+        `## ${message.role === "user" ? "User" : "Quokka assistant"}`,
+        message.thinkingContent ? `> Thinking: ${message.thinkingTokens ?? estimateThinkingTokens(message.thinkingContent)} tokens` : "",
+        message.content,
+        "",
+      ]),
+    ].filter(Boolean);
+    downloadText(`${safeFileName(activeSession.title)}.md`, lines.join("\n"), "text/markdown;charset=utf-8");
+    setPromptNotice("Chat exported as Markdown.");
+  };
+
+  const stopGeneration = () => {
+    if (!abortControllerRef.current) {
+      return;
+    }
+    abortControllerRef.current.abort();
+    setPromptNotice("Stopping generation...");
+  };
+
   const applyPreset = (preset: string) => {
     switch(preset) {
       case 'creative':
@@ -556,6 +588,13 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
     setError(null);
     setPromptNotice(null);
 
+    let rawContent = "";
+    let explicitThinking = "";
+    let finalResponse: ChatCompletionResponse | null = null;
+    const startTime = Date.now();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       const modeMessage: ChatMessagePayload = {
         role: "system",
@@ -570,11 +609,6 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
         .filter((message) => message.role === "user" || message.role === "assistant")
           .map((message) => ({ role: message.role, content: message.content })),
       ];
-      let rawContent = "";
-      let explicitThinking = "";
-      let finalResponse: ChatCompletionResponse | null = null;
-      
-      const startTime = Date.now();
       const updateSpeed = () => {
         const elapsed = (Date.now() - startTime) / 1000;
         if (elapsed <= 0.15) {
@@ -630,7 +664,8 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
             finalResponse = event.response;
             updateSpeed();
           }
-        }
+        },
+        controller.signal
       );
 
       const parsed = splitStreamingReasoning(rawContent);
@@ -665,8 +700,42 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
         updatedAt: response.created_at,
       }));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Chat request failed");
+      const aborted =
+        controller.signal.aborted ||
+        (nextError instanceof DOMException && nextError.name === "AbortError");
+      if (aborted) {
+        const parsed = splitStreamingReasoning(rawContent);
+        const thinkingContent = explicitThinking || parsed.thinking || null;
+        const stoppedAt = new Date().toISOString();
+        if (parsed.answer.trim() || thinkingContent) {
+          updateSession(activeSession.id, (session) => ({
+            ...session,
+            messages: [
+              ...session.messages,
+              {
+                id: uid("msg"),
+                role: "assistant",
+                content: parsed.answer.trim() || "Generation stopped.",
+                thinkingContent,
+                thinkingTokens: estimateThinkingTokens(thinkingContent ?? ""),
+                thinkingMs: Date.now() - startTime,
+                createdAt: stoppedAt,
+                finishReason: "cancelled",
+                truncated: false,
+                maxTokens,
+              },
+            ],
+            updatedAt: stoppedAt,
+          }));
+        }
+        setPromptNotice("Generation stopped.");
+      } else {
+        setError(nextError instanceof Error ? nextError.message : "Chat request failed");
+      }
     } finally {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
       setIsSending(false);
       setLiveAnswer("");
       setLiveThinking("");
@@ -931,16 +1000,28 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                     >
                       <Wand2 className="h-4 w-4" />
                     </button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      disabled={isSending || !selectedModel}
-                      onClick={() => void send()}
-                      className="h-10 rounded-full bg-accent px-4 text-black hover:bg-accent/90"
-                    >
-                      <Send className="mr-1.5 h-4 w-4" />
-                      {isSending ? "Sending..." : "Send"}
-                    </Button>
+                    {isSending ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={stopGeneration}
+                        className="h-10 rounded-full border-warning/45 bg-warning/12 px-4 text-warning hover:bg-warning/18"
+                      >
+                        <Square className="mr-1.5 h-4 w-4" />
+                        Stop
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={!selectedModel}
+                        onClick={() => void send()}
+                        className="h-10 rounded-full bg-accent px-4 text-black hover:bg-accent/90"
+                      >
+                        <Send className="mr-1.5 h-4 w-4" />
+                        Send
+                      </Button>
+                    )}
                   </div>
                 </div>
 
@@ -960,6 +1041,9 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
               <div className="flex items-center gap-1">
                 <Button type="button" size="icon" variant="ghost" onClick={newChat} className="h-9 w-9 rounded-full text-milk/55 hover:bg-milk/8 hover:text-milk" title="New chat">
                   <Plus className="h-4 w-4" />
+                </Button>
+                <Button type="button" size="icon" variant="ghost" onClick={exportActiveChat} disabled={!activeSession?.messages.length} className="h-9 w-9 rounded-full text-milk/55 hover:bg-milk/8 hover:text-milk disabled:opacity-35" title="Export chat">
+                  <Download className="h-4 w-4" />
                 </Button>
                 <Button type="button" size="icon" variant="ghost" onClick={() => setChatSidebarOpen(false)} className="h-9 w-9 rounded-full text-milk/55 hover:bg-milk/8 hover:text-milk" title="Close chat sidebar">
                   <PanelRightClose className="h-4 w-4" />
@@ -1121,6 +1205,24 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
       ) : null}
     </main>
   );
+}
+
+function safeFileName(value: string) {
+  return (value || "quokka-chat")
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 90) || "quokka-chat";
+}
+
+function downloadText(fileName: string, content: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 const chatProfiles: Array<{

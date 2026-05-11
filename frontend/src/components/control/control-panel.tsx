@@ -35,7 +35,7 @@ import type {
   SystemMetricsResponse,
 } from "@/types/api";
 
-type InspectorTab = "details" | "config" | "logs";
+type InspectorTab = "details" | "doctor" | "config" | "logs";
 
 interface ControlPanelProps {
   metrics: SystemMetricsResponse | null;
@@ -80,6 +80,7 @@ type ConfigDraft = {
 };
 
 const PINNED_MODELS_STORAGE_KEY = "quokka.control-panel.pinned-models";
+const INSPECTOR_TAB_STORAGE_KEY = "quokka.control.inspectorTab";
 const DEFAULT_OVERRIDE_TENSOR = "\\.ffn_.*_exps\\.weight=CPU";
 const ACTIVE_STATUSES: ModelStatus[] = ["starting", "running", "warming", "stopping", "unhealthy"];
 
@@ -345,7 +346,10 @@ export function ControlPanel({
   onDeleteModel,
   onClearLogs,
 }: ControlPanelProps) {
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("details");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>(() => {
+    const saved = window.localStorage.getItem(INSPECTOR_TAB_STORAGE_KEY);
+    return saved === "details" || saved === "doctor" || saved === "config" || saved === "logs" ? saved : "details";
+  });
   const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
     try {
       const raw = window.localStorage.getItem(PINNED_MODELS_STORAGE_KEY);
@@ -374,6 +378,10 @@ export function ControlPanel({
     () => config?.models.find((model) => model.id === selectedModel?.id) ?? null,
     [config, selectedModel?.id]
   );
+
+  useEffect(() => {
+    window.localStorage.setItem(INSPECTOR_TAB_STORAGE_KEY, inspectorTab);
+  }, [inspectorTab]);
   const activeProfile = useMemo(
     () => selectedModel?.active_profile ?? selectedModel?.profiles[0] ?? null,
     [selectedModel]
@@ -914,6 +922,19 @@ export function ControlPanel({
                     </button>
                     <button
                       type="button"
+                      onClick={() => setInspectorTab("doctor")}
+                      className={cn(
+                        "inline-flex h-11 items-center gap-2 border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition-colors",
+                        inspectorTab === "doctor"
+                          ? "border-accent bg-accent/12 text-accent"
+                          : "border-line bg-[#111111] text-milk hover:border-accent/55"
+                      )}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Doctor
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setInspectorTab("config")}
                       className={cn(
                         "inline-flex h-11 items-center gap-2 border px-5 text-sm font-semibold uppercase tracking-[0.12em] transition-colors",
@@ -1159,6 +1180,59 @@ export function ControlPanel({
                       </div>
                     </section>
                     </div>
+                  </div>
+                ) : null}
+
+                {inspectorTab === "doctor" ? (
+                  <div className="h-full min-h-0 overflow-y-auto overscroll-contain pr-1">
+                    <section className="border border-line">
+                      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-milk/48">Model Health Doctor</p>
+                          <p className="mt-2 text-sm text-milk/42">{doctorLoading ? "Checking model..." : doctor?.summary ?? doctorError ?? "No diagnostics yet."}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => selectedModel && void api.getModelDoctor(selectedModel.id).then(setDoctor).catch((error) => setDoctorError(error instanceof Error ? error.message : "Health doctor failed"))}
+                          className="quokka-control px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-milk/70 hover:text-accent"
+                        >
+                          Recheck
+                        </button>
+                      </div>
+                      {doctor?.checks.map((check) => <DoctorCheckRow key={check.id} check={check} />)}
+                      {doctor?.recommended_actions.length ? (
+                        <div className="border-t border-line/55 px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Recommended fixes</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {doctor.recommended_actions.map((action) => (
+                              <span key={action} className="quokka-pill px-3 py-1.5 text-xs text-milk/62">{action}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div className="border-t border-line/55 px-4 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-milk/48">Repair actions</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("change_port")}>
+                            Change port
+                          </Button>
+                          {selectedModel.provider === "wsl_llama_cpp" ? (
+                            <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("switch_windows_runtime")}>
+                              Switch to Windows
+                            </Button>
+                          ) : null}
+                          <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("set_llama_server_path")}>
+                            Set llama-server.exe
+                          </Button>
+                          <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("set_model_path")}>
+                            Fix GGUF path
+                          </Button>
+                          <Button variant="secondary" size="sm" className="quokka-control rounded-[var(--radius-control)]" onClick={onOpenAddModel}>
+                            Rescan folder
+                          </Button>
+                        </div>
+                      </div>
+                    </section>
                   </div>
                 ) : null}
 

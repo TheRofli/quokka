@@ -198,6 +198,22 @@ pre {
     box-shadow: var(--shadow-panel);
   }
 
+  .quokka-page {
+    background:
+      radial-gradient(circle at 24% 0%, rgb(var(--color-accent) / 0.08), transparent 34rem),
+      linear-gradient(180deg, rgb(var(--color-panel) / 0.4), rgb(var(--color-shell)));
+  }
+
+  .quokka-zone {
+    background: rgb(var(--color-panel) / 0.62);
+    border: 1px solid rgb(var(--color-line) / 0.62);
+    box-shadow: var(--shadow-panel);
+  }
+
+  .quokka-divider {
+    border-color: rgb(var(--color-line) / 0.62);
+  }
+
   .quokka-panel {
     background: rgb(var(--color-panel) / 0.7);
     border: 1px solid rgb(var(--color-line) / 0.55);
