@@ -74,7 +74,7 @@ try {
     $encodedAssetName = [uri]::EscapeDataString($assetName)
     Invoke-RestMethod `
         -Method Post `
-        -Uri "$uploadUrl?name=$encodedAssetName" `
+        -Uri "${uploadUrl}?name=$encodedAssetName" `
         -Headers $headers `
         -ContentType "application/octet-stream" `
         -InFile $InstallerPath | Out-Null
