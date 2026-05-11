@@ -87,6 +87,18 @@ class CreateModelRequest(BaseModel):
     )
 
 
+class BulkImportModelsRequest(BaseModel):
+    query: str | None = None
+    limit: int = Field(default=80, ge=1, le=250)
+    provider: ProviderType | None = None
+    llama_server_path: str | None = None
+    host: str = "127.0.0.1"
+    start_port: int = Field(default=8080, ge=1, le=65535)
+    context_size: int = Field(default=8192, ge=256)
+    batch_size: int = Field(default=512, ge=1)
+    ubatch_size: int = Field(default=128, ge=1)
+
+
 class RenameModelRequest(BaseModel):
     name: str = Field(min_length=1, max_length=140)
 
@@ -105,6 +117,11 @@ class ModelDoctorResponse(BaseModel):
     summary: str
     checks: list[ModelDoctorCheck] = Field(default_factory=list)
     recommended_actions: list[str] = Field(default_factory=list)
+
+
+class ModelDoctorFixRequest(BaseModel):
+    action: str = Field(pattern="^(change_port|switch_windows_runtime|set_llama_server_path|set_model_path)$")
+    value: str | int | None = None
 
 
 class ApplyBenchmarkProfileRequest(BaseModel):
@@ -149,6 +166,18 @@ class ModelView(BaseModel):
     runtime: RuntimeStateResponse
     artifact: ModelArtifactInfo = Field(default_factory=ModelArtifactInfo)
     supported_actions: list[str]
+
+
+class BulkImportError(BaseModel):
+    path: str
+    message: str
+
+
+class BulkImportModelsResponse(BaseModel):
+    scanned: int = 0
+    created: list[ModelView] = Field(default_factory=list)
+    skipped: list[DiscoveredModelArtifact] = Field(default_factory=list)
+    errors: list[BulkImportError] = Field(default_factory=list)
 
 
 class LabModelConnection(BaseModel):

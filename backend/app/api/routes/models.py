@@ -9,10 +9,13 @@ from app.schemas.api import (
     BenchmarkRunRequest,
     BenchmarkRunResponse,
     BenchmarkRunStatus,
+    BulkImportModelsRequest,
+    BulkImportModelsResponse,
     CreateModelRequest,
     DiscoveredModelArtifact,
     HealthCheckResponse,
     LogResponse,
+    ModelDoctorFixRequest,
     ModelDoctorResponse,
     ModelView,
     RenameModelRequest,
@@ -40,6 +43,14 @@ def discover_models(
     model_service: ModelService = Depends(get_model_service),
 ) -> list[DiscoveredModelArtifact]:
     return model_service.discover_model_artifacts(query=query, limit=limit)
+
+
+@router.post("/bulk-import", response_model=BulkImportModelsResponse)
+def bulk_import_models(
+    payload: BulkImportModelsRequest,
+    model_service: ModelService = Depends(get_model_service),
+) -> BulkImportModelsResponse:
+    return model_service.bulk_import_models(payload)
 
 
 @router.get("/{model_id}", response_model=ModelView)
@@ -112,6 +123,15 @@ async def get_model_health(model_id: str, model_service: ModelService = Depends(
 @router.get("/{model_id}/doctor", response_model=ModelDoctorResponse)
 def get_model_doctor(model_id: str, model_service: ModelService = Depends(get_model_service)) -> ModelDoctorResponse:
     return model_service.diagnose_model(model_id)
+
+
+@router.post("/{model_id}/doctor/fix", response_model=ModelView)
+def apply_model_doctor_fix(
+    model_id: str,
+    payload: ModelDoctorFixRequest,
+    model_service: ModelService = Depends(get_model_service),
+) -> ModelView:
+    return model_service.apply_model_doctor_fix(model_id, payload)
 
 
 @router.post("/{model_id}/apply-benchmark-profile", response_model=ProfileConfig)

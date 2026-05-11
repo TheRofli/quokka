@@ -3,6 +3,8 @@ import type {
   ApplyBenchmarkProfileRequest,
   BenchmarkRunRequest,
   BenchmarkRunResponse,
+  BulkImportModelsRequest,
+  BulkImportModelsResponse,
   ChatCompletionRequest,
   ChatCompletionResponse,
   ChatStreamEvent,
@@ -12,6 +14,7 @@ import type {
   LogResponse,
   MetricHistoryPoint,
   ModelSettings,
+  ModelDoctorFixRequest,
   ModelDoctorResponse,
   ModelView,
   ProfileConfig,
@@ -136,6 +139,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  bulkImportModels: (payload: BulkImportModelsRequest) =>
+    request<BulkImportModelsResponse>("/models/bulk-import", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getModel: (modelId: string) => request<ModelView>(`/models/${modelId}`),
   deleteModel: (modelId: string, deleteFile = false) =>
     request<{ message: string }>(`/models/${modelId}?delete_file=${deleteFile ? "true" : "false"}`, { method: "DELETE" }),
@@ -170,6 +178,11 @@ export const api = {
   clearLogs: (modelId: string) => request<LogResponse>(`/models/${modelId}/logs`, { method: "DELETE" }),
   getHealth: (modelId: string) => request<HealthCheckResponse>(`/models/${modelId}/health`),
   getModelDoctor: (modelId: string) => request<ModelDoctorResponse>(`/models/${modelId}/doctor`),
+  applyModelDoctorFix: (modelId: string, payload: ModelDoctorFixRequest) =>
+    request<ModelView>(`/models/${modelId}/doctor/fix`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   applyBenchmarkProfile: (modelId: string, payload: ApplyBenchmarkProfileRequest) =>
     request<ProfileConfig>(`/models/${modelId}/apply-benchmark-profile`, {
       method: "POST",

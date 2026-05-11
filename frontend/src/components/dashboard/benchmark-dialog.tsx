@@ -11,6 +11,7 @@ import type {
   BenchmarkSuite,
   BenchmarkWorkflowMode,
   ModelView,
+  ProfileConfig,
 } from "@/types/api";
 
 interface BenchmarkDialogProps {
@@ -68,6 +69,37 @@ function downloadText(fileName: string, content: string, mimeType: string) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+const profileDiffFields: Array<{ key: keyof ProfileConfig; label: string }> = [
+  { key: "context_size", label: "ctx" },
+  { key: "batch_size", label: "batch" },
+  { key: "ubatch_size", label: "ubatch" },
+  { key: "cache_type_k", label: "kv K" },
+  { key: "cache_type_v", label: "kv V" },
+  { key: "flash_attn", label: "flash" },
+  { key: "threads", label: "threads" },
+  { key: "threads_batch", label: "threads batch" },
+  { key: "parallel", label: "parallel" },
+];
+
+function profileDiffRows(profile: ProfileConfig | null | undefined, launchParams?: Record<string, unknown>) {
+  if (!profile || !launchParams) {
+    return [];
+  }
+  return profileDiffFields
+    .map((field) => {
+      const next = launchParams[field.key as string];
+      if (next === undefined || next === null || next === "") {
+        return null;
+      }
+      const current = profile[field.key];
+      if (String(current ?? "--") === String(next)) {
+        return null;
+      }
+      return { key: String(field.key), label: field.label, current: String(current ?? "--"), next: String(next) };
+    })
+    .filter((row): row is { key: string; label: string; current: string; next: string } => Boolean(row));
 }
 
 function csvEscape(value: unknown) {
@@ -406,6 +438,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
   const bestTtft = bestNumber(visibleResult?.stages.map((stage) => stage.ttft_ms) ?? [], "min");
   const totalTokens = visibleResult?.stages.reduce((sum, stage) => sum + (stage.generated_tokens_estimate ?? 0), 0) ?? 0;
   const bestCandidate = visibleResult?.leaderboard?.[0] ?? null;
+  const profileDiff = profileDiffRows(selectedModel?.active_profile ?? selectedModel?.profiles[0], visibleResult?.launch_params);
   const shellClass = embedded
     ? "min-h-0 w-full flex-1 overflow-hidden text-milk"
     : "fixed inset-0 z-50 bg-shell p-4 text-milk";
@@ -767,6 +800,30 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                   </div>
                 ))}
                 {!Object.keys(visibleResult?.artifacts ?? {}).length ? <p className="text-milk/38">written after completion</p> : null}
+              </div>
+            </div>
+
+            <div className="quokka-panel mt-6 rounded-[var(--radius-control)] p-3 font-mono text-xs">
+              <div className="mb-2 flex items-center gap-2 uppercase tracking-[0.16em] text-accent/78">
+                <Gauge className="h-3.5 w-3.5" />
+                profile diff
+              </div>
+              <div className="space-y-2">
+                {profileDiff.map((row) => (
+                  <div key={row.key} className="grid grid-cols-[72px_1fr] gap-2">
+                    <span className="text-milk/42">{row.label}</span>
+                    <span className="truncate text-milk/70">
+                      {row.current} <span className="text-accent">-&gt;</span> {row.next}
+                    </span>
+                  </div>
+                ))}
+                {!profileDiff.length ? (
+                  <p className="text-milk/38">
+                    {visibleResult?.launch_params && Object.keys(visibleResult.launch_params).length
+                      ? "recommended profile matches current visible fields"
+                      : "run LLM Tests to preview launch changes"}
+                  </p>
+                ) : null}
               </div>
             </div>
 

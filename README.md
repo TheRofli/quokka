@@ -25,16 +25,18 @@ quokka
 To update Quokka after new commits are pushed:
 
 ```powershell
-quokka-update
+quokka update
 quokka
 ```
 
-If Quokka was installed before the `quokka-update` command existed, run the installer command above one more time. It will update the existing checkout and create the new update command.
+If Quokka was installed before the `quokka update` command existed, run the installer command above one more time. It will update the existing checkout and create the new launcher command.
 
-The installer clones the repo into `%LOCALAPPDATA%\Quokka\app`, prepares the Python/Node dependencies, creates a local `backend/config/quokka.yaml` from `quokka.example.yaml`, adds `%LOCALAPPDATA%\Quokka\bin` to the user `PATH`, and creates the `quokka` and `quokka-update` commands.
+The installer clones the repo into `%LOCALAPPDATA%\Quokka\app`, prepares the Python/Node dependencies, creates a local `backend/config/quokka.yaml` from `quokka.example.yaml`, adds `%LOCALAPPDATA%\Quokka\bin` to the user `PATH`, and creates the `quokka`, `quokka update`, and compatibility `quokka-update` commands.
 
 Useful update options:
 
+- `quokka update -Launch` updates and opens Quokka after the rebuild.
+- `quokka update -NoBuild` only pulls the latest git changes. Use this only when code/dependencies did not change.
 - `quokka-update -Launch` updates and opens Quokka after the rebuild.
 - `quokka-update -NoBuild` only pulls the latest git changes. Use this only when code/dependencies did not change.
 

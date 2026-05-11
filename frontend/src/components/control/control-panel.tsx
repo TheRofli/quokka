@@ -367,6 +367,7 @@ export function ControlPanel({
   const [doctor, setDoctor] = useState<ModelDoctorResponse | null>(null);
   const [doctorLoading, setDoctorLoading] = useState(false);
   const [doctorError, setDoctorError] = useState<string | null>(null);
+  const [doctorFixSaving, setDoctorFixSaving] = useState(false);
 
   const cpuThreadMax = Math.max(1, metrics?.cpu_logical_cores ?? metrics?.cpu_physical_cores ?? 16);
   const selectedConfigModel = useMemo(
@@ -450,6 +451,50 @@ export function ControlPanel({
       cancelled = true;
     };
   }, [selectedModel?.id, selectedModel?.runtime.status, health?.ok, health?.detail]);
+
+  const runDoctorFix = async (action: "change_port" | "switch_windows_runtime" | "set_llama_server_path" | "set_model_path") => {
+    if (!selectedModel) {
+      return;
+    }
+
+    let value: string | number | null = null;
+    if (action === "change_port") {
+      const next = window.prompt("New endpoint port", safePort(selectedModel));
+      if (!next) {
+        return;
+      }
+      value = Number(next);
+      if (!Number.isFinite(value)) {
+        setDoctorError("Port must be a number.");
+        return;
+      }
+    } else if (action === "set_llama_server_path") {
+      const next = window.prompt("Path to llama-server.exe", String(selectedModel.metadata.llama_server_path ?? ""));
+      if (!next) {
+        return;
+      }
+      value = next;
+    } else if (action === "set_model_path") {
+      const next = window.prompt("Path to the GGUF model file", String(selectedModel.metadata.model_path ?? ""));
+      if (!next) {
+        return;
+      }
+      value = next;
+    }
+
+    setDoctorFixSaving(true);
+    setDoctorError(null);
+    try {
+      await api.applyModelDoctorFix(selectedModel.id, { action, value });
+      const nextDoctor = await api.getModelDoctor(selectedModel.id);
+      setDoctor(nextDoctor);
+      setMessage("Doctor fix applied. Quokka will refresh the model card automatically.");
+    } catch (nextError) {
+      setDoctorError(nextError instanceof Error ? nextError.message : "Could not apply doctor fix");
+    } finally {
+      setDoctorFixSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!selectedModelId) {
@@ -958,6 +1003,57 @@ export function ControlPanel({
                           </div>
                         </div>
                       ) : null}
+                      <div className="border-t border-line/55 px-4 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-milk/48">Fix wizard</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={doctorFixSaving}
+                            className="quokka-control rounded-[var(--radius-control)]"
+                            onClick={() => void runDoctorFix("change_port")}
+                          >
+                            Change port
+                          </Button>
+                          {selectedModel.provider === "wsl_llama_cpp" ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={doctorFixSaving}
+                              className="quokka-control rounded-[var(--radius-control)]"
+                              onClick={() => void runDoctorFix("switch_windows_runtime")}
+                            >
+                              Switch to Windows
+                            </Button>
+                          ) : null}
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={doctorFixSaving}
+                            className="quokka-control rounded-[var(--radius-control)]"
+                            onClick={() => void runDoctorFix("set_llama_server_path")}
+                          >
+                            Set llama-server.exe
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={doctorFixSaving}
+                            className="quokka-control rounded-[var(--radius-control)]"
+                            onClick={() => void runDoctorFix("set_model_path")}
+                          >
+                            Fix GGUF path
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="quokka-control rounded-[var(--radius-control)]"
+                            onClick={onOpenAddModel}
+                          >
+                            Rescan folder
+                          </Button>
+                        </div>
+                      </div>
                     </section>
 
                     <section className="border border-line">

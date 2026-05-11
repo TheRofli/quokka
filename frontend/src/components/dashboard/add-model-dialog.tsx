@@ -117,7 +117,9 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
   const [draft, setDraft] = useState<CreateModelRequest>(() => defaultPayload(models));
   const [isScanning, setIsScanning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isBulkImporting, setIsBulkImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [step, setStep] = useState<WizardStep>("source");
   const wasOpenRef = useRef(false);
 
@@ -132,6 +134,7 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
       setDraft(defaultPayload(models));
       setSelectedPath(null);
       setError(null);
+      setNotice(null);
       setStep("source");
     }
     wasOpenRef.current = open;
@@ -140,6 +143,7 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
   const scan = async () => {
     setIsScanning(true);
     setError(null);
+    setNotice(null);
     try {
       const found = await api.discoverModels(query.trim(), 120);
       const nextArtifacts = Array.isArray(found) ? found : [];
@@ -156,6 +160,38 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
       setError(nextError instanceof Error ? nextError.message : "Model scan failed");
     } finally {
       setIsScanning(false);
+    }
+  };
+
+  const importAllFound = async () => {
+    const source = query.trim();
+    if (!source) {
+      setError("Paste a folder such as D:\\Models first, then scan or import.");
+      return;
+    }
+
+    setIsBulkImporting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await api.bulkImportModels({
+        query: source,
+        limit: 120,
+        start_port: nextPort(models),
+        context_size: draft.context_size,
+        batch_size: draft.batch_size,
+        ubatch_size: draft.ubatch_size,
+      });
+      await onAdded();
+      const errorText = result.errors.length ? ` ${result.errors.length} failed.` : "";
+      setNotice(`Imported ${result.created.length} model${result.created.length === 1 ? "" : "s"} from ${result.scanned} discovered GGUF file${result.scanned === 1 ? "" : "s"}.${errorText}`);
+      if (!result.created.length && result.errors.length) {
+        setError(result.errors.map((item) => `${item.path}: ${item.message}`).join("\n"));
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Bulk import failed");
+    } finally {
+      setIsBulkImporting(false);
     }
   };
 
@@ -306,6 +342,15 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                   </Button>
                   <Button variant="secondary" onClick={() => applyManualPath()} className="quokka-control rounded-[var(--radius-control)] px-4 text-milk/85 hover:text-accent">
                     Use path
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void importAllFound()}
+                    disabled={isBulkImporting || isScanning}
+                    className="quokka-control rounded-[var(--radius-control)] px-4 text-milk/85 hover:text-accent"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {isBulkImporting ? "Importing" : "Import all"}
                   </Button>
                 </div>
                 <p className="mt-2 text-xs text-milk/42">Scanning is manual, so the dialog opens instantly and never blocks Quokka on huge drives.</p>
@@ -491,7 +536,8 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
             </div>
           ) : null}
 
-          {error ? <p className="mt-4 rounded-[var(--radius-control)] border border-danger/45 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p> : null}
+          {notice ? <p className="mt-4 rounded-[var(--radius-control)] border border-success/35 bg-success/10 px-3 py-2 text-sm text-success">{notice}</p> : null}
+          {error ? <p className="mt-4 whitespace-pre-wrap rounded-[var(--radius-control)] border border-danger/45 bg-danger/10 px-3 py-2 text-sm text-danger">{error}</p> : null}
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-line/60 px-5 py-4">

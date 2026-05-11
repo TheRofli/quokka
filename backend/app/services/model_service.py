@@ -33,12 +33,16 @@ from app.schemas.api import (
     BenchmarkEvent,
     BenchmarkRecommendation,
     BenchmarkStageResult,
+    BulkImportError,
+    BulkImportModelsRequest,
+    BulkImportModelsResponse,
     CreateModelRequest,
     DiscoveredModelArtifact,
     HealthCheckResponse,
     LogResponse,
     ModelArtifactInfo,
     ModelDoctorCheck,
+    ModelDoctorFixRequest,
     ModelDoctorResponse,
     ModelView,
     RuntimeStateResponse,
@@ -188,6 +192,78 @@ class ModelService:
             recommended_actions=list(dict.fromkeys(actions)),
         )
 
+    def apply_model_doctor_fix(self, model_id: str, payload: ModelDoctorFixRequest) -> ModelView:
+        model = self.config_service.get_model(model_id)
+        profile = model.get_active_profile()
+        next_provider = model.provider
+        next_model_path = str((profile.model_path if profile and profile.model_path else model.metadata.get("model_path", "")) or "")
+        next_llama_server_path = str(model.metadata.get("llama_server_path", "") or "")
+        parsed = urlparse(model.endpoint)
+        next_host = parsed.hostname or str(model.metadata.get("host", "") or "127.0.0.1")
+        next_port = parsed.port or int(model.metadata.get("port", 8080) or 8080)
+
+        if payload.action == "change_port":
+            try:
+                next_port = int(payload.value or 0)
+            except (TypeError, ValueError) as exc:
+                raise BadRequestError("Port must be a number between 1 and 65535.") from exc
+            if next_port < 1 or next_port > 65535:
+                raise BadRequestError("Port must be between 1 and 65535.")
+        elif payload.action == "switch_windows_runtime":
+            next_provider = ProviderType.WINDOWS_LLAMA_CPP
+        elif payload.action == "set_llama_server_path":
+            next_llama_server_path = str(payload.value or "").strip().strip("\"'")
+            if not next_llama_server_path:
+                raise BadRequestError("llama-server.exe path is required.")
+            if not Path(next_llama_server_path).exists():
+                raise BadRequestError(f"llama-server.exe was not found at {next_llama_server_path}.")
+            next_provider = ProviderType.WINDOWS_LLAMA_CPP
+        elif payload.action == "set_model_path":
+            next_model_path = str(payload.value or "").strip().strip("\"'")
+            if not next_model_path:
+                raise BadRequestError("Model path is required.")
+            next_provider = ProviderType.WINDOWS_LLAMA_CPP if re.match(r"^[a-zA-Z]:[\\/]", next_model_path) else next_provider
+            if next_provider == ProviderType.WINDOWS_LLAMA_CPP and not Path(next_model_path).exists():
+                raise BadRequestError(f"Model file was not found at {next_model_path}.")
+        else:
+            raise BadRequestError(f"Unsupported doctor fix action: {payload.action}")
+
+        if next_provider not in LLAMA_CPP_PROVIDERS:
+            raise BadRequestError("Doctor fixes currently support local llama.cpp runtimes.")
+        if not next_model_path:
+            raise BadRequestError("Cannot rebuild launch command because model_path is empty.")
+
+        rebuild = self._create_request_from_model(
+            model,
+            provider=next_provider,
+            model_path=next_model_path,
+            llama_server_path=next_llama_server_path or None,
+            host=next_host,
+            port=next_port,
+        )
+        model.provider = next_provider
+        model.endpoint = f"http://{next_host}:{next_port}"
+        model.health_url = f"{model.endpoint}/health"
+        model.launch = self._build_local_llama_launch(rebuild)
+        model.metadata.update(
+            {
+                "host": next_host,
+                "port": next_port,
+                "model_path": next_model_path,
+                "llama_server_path": rebuild.llama_server_path or "",
+                "wsl_distro": rebuild.wsl_distro,
+                "engine": "llama.cpp",
+            }
+        )
+        if profile and profile.model_path:
+            for item in model.profiles:
+                if item.id == profile.id:
+                    item.model_path = next_model_path
+                    break
+        updated = self.config_service.update_model(model)
+        self.sync_runtime_catalog()
+        return self._compose_model_view(updated)
+
     def apply_benchmark_profile(self, model_id: str, payload: ApplyBenchmarkProfileRequest) -> ProfileConfig:
         model = self.config_service.get_model(model_id)
         base = model.get_active_profile()
@@ -273,6 +349,44 @@ class ModelService:
 
         return discovered
 
+    def bulk_import_models(self, payload: BulkImportModelsRequest) -> BulkImportModelsResponse:
+        artifacts = self.discover_model_artifacts(query=payload.query, limit=payload.limit)
+        created: list[ModelView] = []
+        errors: list[BulkImportError] = []
+        used_ports = self._used_ports()
+        next_port = max(1, min(payload.start_port, 65535))
+
+        for artifact in artifacts:
+            while next_port in used_ports and next_port < 65535:
+                next_port += 1
+            if next_port > 65535:
+                errors.append(BulkImportError(path=artifact.path, message="No free port was available."))
+                continue
+
+            provider = payload.provider or artifact.provider
+            request = CreateModelRequest(
+                provider=provider,
+                name=artifact.suggested_name,
+                model_path=artifact.launch_path,
+                llama_server_path=payload.llama_server_path,
+                port=next_port,
+                host=payload.host,
+                family=artifact.family,
+                size_label=artifact.size_label,
+                quantization=artifact.quantization,
+                context_size=payload.context_size,
+                batch_size=payload.batch_size,
+                ubatch_size=payload.ubatch_size,
+            )
+            try:
+                created.append(self.create_model(request))
+                used_ports.add(next_port)
+                next_port += 1
+            except Exception as exc:  # noqa: BLE001 - bulk import should keep moving and report per-file failures.
+                errors.append(BulkImportError(path=artifact.path, message=str(exc)))
+
+        return BulkImportModelsResponse(scanned=len(artifacts), created=created, skipped=[], errors=errors)
+
     def create_model(self, payload: CreateModelRequest) -> ModelView:
         if payload.provider not in LLAMA_CPP_PROVIDERS:
             raise BadRequestError("Automatic model creation supports local llama.cpp models. Use Ollama/OpenAI-compatible entries from config for external endpoints.")
@@ -334,6 +448,58 @@ class ModelService:
         created = self.config_service.create_model(model)
         self.sync_runtime_catalog()
         return self._compose_model_view(created)
+
+    def _create_request_from_model(
+        self,
+        model: ModelConfig,
+        *,
+        provider: ProviderType | None = None,
+        model_path: str | None = None,
+        llama_server_path: str | None = None,
+        host: str | None = None,
+        port: int | None = None,
+    ) -> CreateModelRequest:
+        profile = model.get_active_profile()
+        parsed = urlparse(model.endpoint)
+        resolved_provider = provider or model.provider
+        resolved_path = model_path or str((profile.model_path if profile and profile.model_path else model.metadata.get("model_path", "")) or "")
+        resolved_host = host or parsed.hostname or str(model.metadata.get("host", "") or "127.0.0.1")
+        resolved_port = port or parsed.port or int(model.metadata.get("port", 8080) or 8080)
+        return CreateModelRequest(
+            provider=resolved_provider,
+            name=model.name,
+            model_path=resolved_path,
+            llama_server_path=llama_server_path if llama_server_path is not None else str(model.metadata.get("llama_server_path", "") or "") or None,
+            port=resolved_port,
+            host=resolved_host,
+            modality=model.modality,
+            family=str(model.metadata.get("family", "") or "") or None,
+            size_label=str(model.metadata.get("size", "") or "") or None,
+            quantization=str(model.metadata.get("quantization", "") or "") or None,
+            wsl_distro=str(model.metadata.get("wsl_distro", "") or "Ubuntu"),
+            description=model.description,
+            context_size=profile.context_size if profile else 8192,
+            batch_size=profile.batch_size if profile else 512,
+            ubatch_size=profile.ubatch_size if profile else 128,
+            temperature=profile.temperature if profile else 0.15,
+            top_p=profile.top_p if profile else 0.9,
+            top_k=profile.top_k if profile else 30,
+            min_p=profile.min_p if profile else 0.02,
+            cache_type_k=profile.cache_type_k if profile else "q4_0",
+            cache_type_v=profile.cache_type_v if profile else "q4_0",
+            extra_args=list(profile.extra_args) if profile else [
+                "--jinja",
+                "--n-gpu-layers",
+                "999",
+                "--flash-attn",
+                "on",
+                "--parallel",
+                "1",
+                "--cache-ram",
+                "0",
+                "--no-mmap",
+            ],
+        )
 
     def _build_local_llama_launch(self, payload: CreateModelRequest) -> LaunchConfig:
         if payload.provider == ProviderType.WSL_LLAMA_CPP:
@@ -2954,6 +3120,20 @@ class ModelService:
                     paths.add(profile.model_path.lower())
                     paths.add(self._file_name_from_path(profile.model_path).lower())
         return paths
+
+    def _used_ports(self) -> set[int]:
+        ports: set[int] = set()
+        for model in self.config_service.list_models():
+            parsed = urlparse(model.endpoint)
+            if parsed.port:
+                ports.add(parsed.port)
+            metadata_port = model.metadata.get("port")
+            if metadata_port is not None:
+                try:
+                    ports.add(int(metadata_port))
+                except (TypeError, ValueError):
+                    continue
+        return ports
 
     def _discover_wsl_models(self, distro: str, limit: int) -> list[DiscoveredModelArtifact]:
         roots = "~/llm/models /home/$USER/llm/models /mnt/c/llm/models"

@@ -68,14 +68,8 @@ Write-Host "Preparing dependencies..."
 $binDir = Join-Path $env:LOCALAPPDATA "Quokka\bin"
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 
-$cmdPath = Join-Path $binDir "quokka.cmd"
-$cmdContent = @"
-@echo off
-powershell -NoProfile -ExecutionPolicy Bypass -File "$startScript" %*
-"@
-Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
-
 $installDirLiteral = $InstallDir.Replace("'", "''")
+$startScriptLiteral = $startScript.Replace("'", "''")
 $updateScriptPath = Join-Path $binDir "quokka-update.ps1"
 $updateScriptContent = @"
 param(
@@ -111,15 +105,65 @@ Write-Host "Quokka updated."
 Write-Host "Run: quokka"
 
 if (`$Launch) {
-    `$cmdPath = Join-Path `$PSScriptRoot "quokka.cmd"
-    if (-not (Test-Path `$cmdPath)) {
-        throw "quokka.cmd was not found at `$cmdPath."
+    `$launcherPath = Join-Path `$PSScriptRoot "quokka.ps1"
+    if (-not (Test-Path `$launcherPath)) {
+        throw "quokka.ps1 was not found at `$launcherPath."
     }
 
-    & `$cmdPath
+    & powershell -NoProfile -ExecutionPolicy Bypass -File `$launcherPath
 }
 "@
 Set-Content -Path $updateScriptPath -Value $updateScriptContent -Encoding UTF8
+
+$launcherScriptPath = Join-Path $binDir "quokka.ps1"
+$updateScriptLiteral = $updateScriptPath.Replace("'", "''")
+$launcherScriptContent = @"
+param(
+    [Parameter(ValueFromRemainingArguments = `$true)]
+    [string[]] `$Arguments
+)
+
+`$ErrorActionPreference = "Stop"
+`$StartScript = '$startScriptLiteral'
+`$UpdateScript = '$updateScriptLiteral'
+
+if (`$Arguments.Count -gt 0 -and (`$Arguments[0] -ieq "update" -or `$Arguments[0] -ieq "upgrade")) {
+    `$remaining = @()
+    if (`$Arguments.Count -gt 1) {
+        `$remaining = `$Arguments[1..(`$Arguments.Count - 1)]
+    }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File `$UpdateScript @remaining
+    exit `$LASTEXITCODE
+}
+
+if (`$Arguments.Count -gt 0 -and (`$Arguments[0] -ieq "help" -or `$Arguments[0] -eq "--help" -or `$Arguments[0] -eq "-h")) {
+    Write-Host "Quokka commands:"
+    Write-Host "  quokka          Launch Quokka"
+    Write-Host "  quokka update   Pull updates and rebuild"
+    Write-Host "  quokka-update   Compatibility alias for updates"
+    exit 0
+}
+
+& powershell -NoProfile -ExecutionPolicy Bypass -File `$StartScript @Arguments
+"@
+Set-Content -Path $launcherScriptPath -Value $launcherScriptContent -Encoding UTF8
+
+$cmdPath = Join-Path $binDir "quokka.cmd"
+$cmdContent = @"
+@echo off
+if /I "%~1"=="update" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$launcherScriptPath" %*
+) else if /I "%~1"=="upgrade" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$launcherScriptPath" %*
+) else if /I "%~1"=="help" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$launcherScriptPath" %*
+) else if /I "%~1"=="--help" (
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$launcherScriptPath" %*
+) else (
+  start "" powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$launcherScriptPath" %*
+)
+"@
+Set-Content -Path $cmdPath -Value $cmdContent -Encoding ASCII
 
 $updateCmdPath = Join-Path $binDir "quokka-update.cmd"
 $updateCmdContent = @"
@@ -132,7 +176,7 @@ Add-UserPath $binDir
 
 Write-Host ""
 Write-Host "Quokka installed."
-Write-Host "Commands: quokka, quokka-update"
+Write-Host "Commands: quokka, quokka update, quokka-update"
 Write-Host "If this terminal does not see these commands, open a new terminal window."
 
 if (-not $NoLaunch) {

@@ -127,6 +127,25 @@ export interface CreateModelRequest {
   extra_args: string[];
 }
 
+export interface BulkImportModelsRequest {
+  query?: string | null;
+  limit?: number;
+  provider?: ProviderType | null;
+  llama_server_path?: string | null;
+  host?: string;
+  start_port?: number;
+  context_size?: number;
+  batch_size?: number;
+  ubatch_size?: number;
+}
+
+export interface BulkImportModelsResponse {
+  scanned: number;
+  created: ModelView[];
+  skipped: DiscoveredModelArtifact[];
+  errors: Array<{ path: string; message: string }>;
+}
+
 export interface ModelDoctorCheck {
   id: string;
   label: string;
@@ -141,6 +160,11 @@ export interface ModelDoctorResponse {
   summary: string;
   checks: ModelDoctorCheck[];
   recommended_actions: string[];
+}
+
+export interface ModelDoctorFixRequest {
+  action: "change_port" | "switch_windows_runtime" | "set_llama_server_path" | "set_model_path";
+  value?: string | number | null;
 }
 
 export interface ApplyBenchmarkProfileRequest {
