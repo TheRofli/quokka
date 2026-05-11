@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle2,
+  ChevronDown,
   Cpu,
   Download,
   ExternalLink,
@@ -12,7 +14,6 @@ import {
   MonitorDown,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Target,
   XCircle,
   Zap,
@@ -22,7 +23,14 @@ import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatNumber } from "@/lib/utils";
-import type { CreateModelRequest, ModelDownloadStatus, ModelLibraryEntry, ModelLibraryFile, ModelView, SystemMetricsResponse } from "@/types/api";
+import type {
+  CreateModelRequest,
+  ModelDownloadStatus,
+  ModelLibraryEntry,
+  ModelLibraryFile,
+  ModelView,
+  SystemMetricsResponse,
+} from "@/types/api";
 
 interface ModelLibraryProps {
   models: ModelView[];
@@ -66,28 +74,39 @@ const goalOptions: Array<{ id: FitGoal; label: string; hint: string; query: stri
   { id: "coding", label: "Coding", hint: "Coder and agent-style local models.", query: "qwen coder devstral gguf q4_k_m" },
   { id: "chat", label: "Chat", hint: "General assistant and instruct models.", query: "llama instruct gemma gguf q4_k_m" },
   { id: "fast", label: "Small/Fast", hint: "Low latency models for quick replies.", query: "4b 7b gguf q4_k_m" },
-  { id: "reasoning", label: "Reasoning", hint: "More capable models, more VRAM pressure.", query: "qwen reasoning 14b 32b gguf q4_k_m" },
+  { id: "reasoning", label: "Reasoning", hint: "More capable models with more VRAM pressure.", query: "qwen reasoning 14b 32b gguf q4_k_m" },
   { id: "vision", label: "Vision", hint: "Vision models and mmproj companions.", query: "llava vision gguf mmproj" },
 ];
 
 const categoryPresets = [
-  { label: "Best for this PC", query: "qwen coder gguf q4_k_m", hint: "Start here when you just want something good." },
-  { label: "Full GPU only", query: "7b 8b gguf q4_k_m", hint: "Safer models that should avoid CPU spill." },
-  { label: "RTX 4070 class", query: "14b gguf q4_k_m", hint: "Good quality on 12GB cards with careful quant choice." },
-  { label: "CPU fallback", query: "3b 4b gguf q4_0", hint: "For machines without CUDA or with tiny VRAM." },
-  { label: "Qwen", query: "qwen gguf q4_k_m", hint: "Qwen and Qwen Coder families." },
-  { label: "Gemma", query: "gemma gguf q4_k_m", hint: "Gemma chat and coding derivatives." },
-  { label: "Mistral", query: "mistral devstral gguf q4_k_m", hint: "Mistral, Devstral, Codestral style models." },
-  { label: "Llama", query: "llama instruct gguf q4_k_m", hint: "Llama instruct/chat variants." },
-  { label: "Long Context", query: "long context gguf q4_k_m", hint: "Models with bigger context windows." },
-  { label: "Vision", query: "llava gguf mmproj", hint: "Vision models need an mmproj file too." },
-  { label: "1-4B", query: "4b gguf q4", hint: "Very small and fast." },
-  { label: "7-9B", query: "8b gguf q4_k_m", hint: "Balanced quality and speed." },
-  { label: "14B", query: "14b gguf q4_k_m", hint: "Better quality with higher VRAM pressure." },
-  { label: "30B+", query: "32b gguf q4_k_m", hint: "Usually needs offload or large VRAM." },
+  { label: "Best for this PC", query: "qwen coder gguf q4_k_m" },
+  { label: "Coding", query: "qwen coder devstral gguf q4_k_m" },
+  { label: "Small/Fast", query: "4b 7b gguf q4_k_m" },
+  { label: "Chat", query: "llama instruct gemma gguf q4_k_m" },
+  { label: "Vision", query: "llava gguf mmproj" },
+  { label: "Long Context", query: "long context gguf q4_k_m" },
+  { label: "Qwen", query: "qwen gguf q4_k_m" },
+  { label: "Gemma", query: "gemma gguf q4_k_m" },
+  { label: "Mistral", query: "mistral devstral gguf q4_k_m" },
+  { label: "Llama", query: "llama instruct gguf q4_k_m" },
+  { label: "CPU fallback", query: "3b 4b gguf q4_0" },
+  { label: "30B+", query: "32b gguf q4_k_m" },
 ];
 
-const officialOwners = new Set(["google", "qwen", "qwenlm", "mistralai", "meta-llama", "deepseek-ai", "nvidia", "microsoft", "allenai", "01-ai", "tiiuae", "ibm-granite"]);
+const officialOwners = new Set([
+  "google",
+  "qwen",
+  "qwenlm",
+  "mistralai",
+  "meta-llama",
+  "deepseek-ai",
+  "nvidia",
+  "microsoft",
+  "allenai",
+  "01-ai",
+  "tiiuae",
+  "ibm-granite",
+]);
 const knownQuantizers = new Set(["bartowski", "unsloth", "lmstudio-community", "thebloke", "second-state", "mradermacher", "ggml-org"]);
 
 function portFromModel(model: ModelView) {
@@ -228,13 +247,17 @@ function estimateSpeed(file: ModelLibraryFile, fit: FitInfo, gpuTotalGb?: number
   return clamp((95 / Math.max(sizeGb, 1.2)) * hardwareFactor * fitFactor, 1, 90);
 }
 
-function scoreFile(entry: ModelLibraryEntry, file: ModelLibraryFile, options: {
-  goal: FitGoal;
-  policy: FitPolicy;
-  contextSize: number;
-  gpuTotalGb?: number | null;
-  ramTotalGb?: number | null;
-}): ScoredFile {
+function scoreFile(
+  entry: ModelLibraryEntry,
+  file: ModelLibraryFile,
+  options: {
+    goal: FitGoal;
+    policy: FitPolicy;
+    contextSize: number;
+    gpuTotalGb?: number | null;
+    ramTotalGb?: number | null;
+  }
+): ScoredFile {
   const fit = fitDetails(file, options.contextSize, options.gpuTotalGb, options.ramTotalGb);
   const quality = quantQuality(file.quantization);
   const speed = estimateSpeed(file, fit, options.gpuTotalGb);
@@ -307,50 +330,166 @@ function payloadFromDownload(download: ModelDownloadStatus, models: ModelView[])
   };
 }
 
+function goalLabel(goal: FitGoal) {
+  return goalOptions.find((option) => option.id === goal)?.label ?? "Best overall";
+}
+
+function policyLabel(policy: FitPolicy) {
+  if (policy === "gpu") return "Full GPU only";
+  if (policy === "offload") return "GPU + small offload";
+  return "Show everything";
+}
+
+function sourceFilterLabel(sourceFilter: SourceFilter) {
+  if (sourceFilter === "official") return "Official only";
+  if (sourceFilter === "community") return "Community GGUF";
+  return "All sources";
+}
+
+function sortLabel(sortMode: SortMode) {
+  const labels: Record<SortMode, string> = {
+    recommendation: "Quokka score",
+    quality: "Quality",
+    speed: "Likely speed",
+    downloads: "Downloads",
+    smallest: "Smallest",
+    largest: "Largest",
+    params: "Parameter count",
+  };
+  return labels[sortMode];
+}
+
 function FitBadge({ fit }: { fit: FitInfo }) {
   return (
-    <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", fit.tone, fit.rank >= 4 ? "border-success/35 bg-success/10" : fit.rank === 3 ? "border-warning/35 bg-warning/10" : fit.rank === 0 ? "border-danger/35 bg-danger/10" : "border-line/60 bg-panel/40")}>
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold",
+        fit.tone,
+        fit.rank >= 4
+          ? "border-success/35 bg-success/10"
+          : fit.rank === 3
+            ? "border-warning/35 bg-warning/10"
+            : fit.rank === 0
+              ? "border-danger/35 bg-danger/10"
+              : "border-line/60 bg-panel/40"
+      )}
+    >
       {fit.label}
     </span>
   );
 }
 
-function Stat({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Gauge }) {
+function ControlLabel({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="rounded-[var(--radius-control)] border border-line/65 bg-panel/45 px-3 py-3">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-milk/38">
+    <label className="block">
+      <span className="mb-2 flex items-center justify-between gap-2 font-mono text-[12px] lowercase tracking-wide text-milk/58">
+        <span>&gt; {label}:</span>
+        {hint ? <span className="truncate text-[11px] text-milk/32">{hint}</span> : null}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function RailMetric({ icon: Icon, label, value, hint }: { icon: LucideIcon; label: string; value: string; hint?: string }) {
+  return (
+    <div className="border-b border-line/55 py-3">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-milk/42">
         <Icon className="h-3.5 w-3.5 text-accent" />
         {label}
       </div>
-      <p className="mt-2 truncate text-sm font-semibold text-milk">{value}</p>
+      <p className="mt-2 truncate font-mono text-lg font-semibold text-milk">{value}</p>
+      {hint ? <p className="mt-1 truncate text-xs text-milk/42">{hint}</p> : null}
     </div>
   );
 }
 
-function EntryMiniCard({ item, onDownload }: { item: ScoredEntry; onDownload: (entry: ModelLibraryEntry, file: ModelLibraryFile) => void }) {
-  if (!item.best) {
+function TerminalLine({ tag, tone = "text-live", children }: { tag: string; tone?: string; children: ReactNode }) {
+  return (
+    <p className="font-mono text-sm leading-7 text-milk/70">
+      <span className={cn("mr-2", tone)}>[{tag.padEnd(5)}]</span>
+      {children}
+    </p>
+  );
+}
+
+function ResultRow({
+  item,
+  index,
+  variants,
+  onDownload,
+}: {
+  item: ScoredEntry;
+  index: number;
+  variants: ScoredFile[];
+  onDownload: (entry: ModelLibraryEntry, file: ModelLibraryFile) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const best = item.best;
+
+  if (!best) {
     return null;
   }
+
   return (
-    <div className="min-w-[280px] rounded-[var(--radius-control)] border border-line/65 bg-panel/45 p-3">
-      <div className="flex items-start justify-between gap-3">
+    <article className="border-b border-line/55 px-4 py-3 transition hover:bg-panel/32">
+      <div className="grid gap-3 xl:grid-cols-[44px_minmax(0,1fr)_110px_92px_96px_112px] xl:items-center">
+        <span className="font-mono text-xs text-milk/34">#{String(index + 1).padStart(2, "0")}</span>
         <div className="min-w-0">
-          <p className="truncate font-semibold text-milk">{item.entry.name}</p>
-          <p className="mt-1 truncate font-mono text-xs text-live/70">{item.entry.repo_id}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate font-semibold text-milk">{item.entry.name}</p>
+            {item.paramsB ? <span className="rounded-full bg-milk/6 px-2 py-0.5 text-[11px] text-milk/52">{item.paramsB}B</span> : null}
+            <span className="rounded-full bg-milk/6 px-2 py-0.5 text-[11px] text-milk/42">{item.sourceLabel}</span>
+          </div>
+          <button
+            type="button"
+            className="mt-1 truncate font-mono text-xs text-live/68 hover:text-live"
+            onClick={() => window.quokkaDesktop?.openExternal?.(`https://huggingface.co/${item.entry.repo_id}`)}
+          >
+            {item.entry.repo_id}
+          </button>
+          <p className="mt-2 truncate font-mono text-xs text-milk/38">{best.file.filename}</p>
         </div>
-        <FitBadge fit={item.best.fit} />
+        <FitBadge fit={best.fit} />
+        <div className="font-mono text-sm text-milk/68">
+          <span className="block text-milk/86">{best.file.quantization ?? "GGUF"}</span>
+          <span className="text-xs text-milk/36">{bytesToLabel(best.file.size_bytes)}</span>
+        </div>
+        <div className="font-mono text-sm">
+          <span className={best.fit.tone}>{best.estimatedVramGb ? `${formatNumber(best.estimatedVramGb, 1)} GB` : "--"}</span>
+          <span className="block text-xs text-milk/36">need</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="primary" size="sm" className="rounded-[var(--radius-control)]" onClick={() => onDownload(item.entry, best.file)}>
+            <Download className="h-4 w-4" />
+            GGUF
+          </Button>
+          <Button variant="ghost" size="icon" className="rounded-[var(--radius-control)]" onClick={() => setExpanded((value) => !value)} title="Show variants">
+            <ChevronDown className={cn("h-4 w-4 transition", expanded ? "rotate-180" : "")} />
+          </Button>
+        </div>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-milk/48">
-        <span><b className="block text-milk/80">{formatNumber(item.best.score, 0)}</b>score</span>
-        <span><b className="block text-milk/80">{item.best.estimatedVramGb ? `${formatNumber(item.best.estimatedVramGb, 1)}GB` : "--"}</b>VRAM</span>
-        <span><b className="block text-milk/80">{item.best.estimatedSpeed ? formatNumber(item.best.estimatedSpeed, 1) : "--"}</b>tok/s</span>
-      </div>
-      <p className="mt-3 truncate font-mono text-xs text-milk/50">{item.best.file.filename}</p>
-      <Button variant="secondary" size="sm" className="quokka-control mt-3 w-full rounded-[var(--radius-control)]" onClick={() => onDownload(item.entry, item.best!.file)}>
-        <Download className="h-4 w-4" />
-        Download best GGUF
-      </Button>
-    </div>
+
+      {expanded ? (
+        <div className="mt-3 rounded-[var(--radius-control)] border border-line/55 bg-shell/35">
+          {variants.slice(0, 8).map((variant) => (
+            <div
+              key={variant.file.filename}
+              className="grid gap-2 border-b border-line/40 px-3 py-2 last:border-b-0 md:grid-cols-[minmax(0,1fr)_84px_78px_94px_88px_108px] md:items-center"
+            >
+              <span className="truncate font-mono text-xs text-milk/58">{variant.file.filename}</span>
+              <span className="font-mono text-xs text-accent">{variant.file.quantization ?? "GGUF"}</span>
+              <span className="font-mono text-xs text-milk/42">{bytesToLabel(variant.file.size_bytes)}</span>
+              <span className={cn("font-mono text-xs", variant.fit.tone)}>{variant.fit.label}</span>
+              <span className="font-mono text-xs text-milk/48">{variant.estimatedSpeed ? `${formatNumber(variant.estimatedSpeed, 1)} tok/s` : "--"}</span>
+              <Button variant="secondary" size="sm" className="quokka-control rounded-[var(--radius-control)]" onClick={() => onDownload(item.entry, variant.file)}>
+                Download
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -366,6 +505,7 @@ export function ModelLibrary({ models, metrics, onAdded }: ModelLibraryProps) {
   const [contextSize, setContextSize] = useState(8192);
   const [sortMode, setSortMode] = useState<SortMode>("recommendation");
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -407,10 +547,17 @@ export function ModelLibrary({ models, metrics, onAdded }: ModelLibraryProps) {
     });
   }, [contextSize, entries, goal, gpuTotalGb, policy, ramTotalGb, sortMode, sourceFilter]);
 
-  const topPick = scoredEntries.find((item) => item.best && item.best.fit.rank > 0) ?? scoredEntries[0] ?? null;
-  const fullGpuLane = scoredEntries.filter((item) => item.best && item.best.fit.rank >= 4).slice(0, 8);
-  const speedLane = [...scoredEntries].sort((left, right) => (right.best?.estimatedSpeed ?? 0) - (left.best?.estimatedSpeed ?? 0)).slice(0, 8);
-  const qualityLane = [...scoredEntries].sort((left, right) => (right.best?.quality ?? 0) - (left.best?.quality ?? 0)).slice(0, 8);
+  const policyVisibleEntries = useMemo(() => {
+    const visible = scoredEntries.filter((item) => {
+      if (!item.best) return false;
+      if (policy === "gpu") return item.best.fit.rank >= 4;
+      if (policy === "offload") return item.best.fit.rank >= 3;
+      return item.best.fit.rank >= 0;
+    });
+    return visible.length ? visible : scoredEntries;
+  }, [policy, scoredEntries]);
+
+  const topPick = policyVisibleEntries.find((item) => item.best && item.best.fit.rank > 0) ?? policyVisibleEntries[0] ?? null;
 
   useEffect(() => {
     void refreshDownloads();
@@ -519,348 +666,307 @@ export function ModelLibrary({ models, metrics, onAdded }: ModelLibraryProps) {
     }
   };
 
-  return (
-    <main className="mt-4 grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-[var(--radius-soft)] border border-line/70 bg-panel/55 xl:grid-cols-[330px_minmax(0,1fr)_360px]">
-      <aside className="min-h-0 overflow-y-auto border-b border-line/65 bg-shell/35 px-5 py-5 xl:border-b-0 xl:border-r">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">Model Fit Advisor</p>
-          <h1 className="mt-2 text-2xl font-semibold text-milk">Find what runs well</h1>
-          <p className="mt-2 text-sm leading-6 text-milk/52">Pick a goal, Quokka scores GGUF files for your GPU, VRAM, RAM, context, and quantization.</p>
-        </div>
+  const variantScores = (item: ScoredEntry) =>
+    item.entry.files
+      .map((file) => scoreFile(item.entry, file, { goal, policy, contextSize, gpuTotalGb, ramTotalGb }))
+      .sort((left, right) => right.score - left.score);
 
-        <div className="mt-5 rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-milk/42">Search Hugging Face</p>
-          <div className="mt-3 flex gap-2">
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="qwen coder gguf q4_k_m" className="quokka-input" />
-            <Button variant="primary" size="icon" onClick={() => void runSearch()} disabled={isSearching}>
-              {isSearching ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+  const topFit = topPick?.best?.fit ?? null;
+  const runningDownloads = activeDownloads.length;
+
+  return (
+    <main className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+      <header className="quokka-panel flex h-[66px] shrink-0 items-center justify-between rounded-[var(--radius-control)] px-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <Library className="h-5 w-5 text-accent" />
+            <h1 className="truncate text-xl font-semibold tracking-[0.16em] text-milk">MODEL LIBRARY</h1>
+          </div>
+          <p className="mt-1 truncate font-mono text-xs text-milk/42">fit advisor / GGUF search / local launch preparation</p>
+        </div>
+        <div className="hidden items-center gap-2 lg:flex">
+          <span className="quokka-pill px-3 py-2 font-mono text-xs text-milk/52">{entries.length} repos</span>
+          <span className="quokka-pill px-3 py-2 font-mono text-xs text-milk/52">{goalLabel(goal)}</span>
+          <span className="quokka-pill px-3 py-2 font-mono text-xs text-milk/52">{policyLabel(policy)}</span>
+        </div>
+      </header>
+
+      <div className="mt-3 grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden xl:grid-cols-[300px_minmax(0,1fr)_270px]">
+        <aside className="quokka-surface flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-control)]">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
+            <ControlLabel label="goal" hint="what you want">
+              <select className="quokka-input h-12 w-full rounded-[var(--radius-control)] px-3 text-sm" value={goal} onChange={(event) => applyGoal(event.target.value as FitGoal)} disabled={isSearching}>
+                {goalOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs leading-5 text-milk/42">{goalOptions.find((option) => option.id === goal)?.hint}</p>
+            </ControlLabel>
+
+            <ControlLabel label="search" hint="Hugging Face">
+              <div className="flex gap-2">
+                <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="qwen coder gguf q4_k_m" className="quokka-input h-12" />
+                <Button variant="primary" size="icon" className="h-12 w-12 shrink-0 rounded-[var(--radius-control)]" onClick={() => void runSearch()} disabled={isSearching}>
+                  {isSearching ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                </Button>
+              </div>
+            </ControlLabel>
+
+            <ControlLabel label="fit policy" hint="how strict">
+              <select className="quokka-input h-12 w-full rounded-[var(--radius-control)] px-3 text-sm" value={policy} onChange={(event) => setPolicy(event.target.value as FitPolicy)}>
+                <option value="offload">GPU + small offload</option>
+                <option value="gpu">Full GPU only</option>
+                <option value="any">Show everything</option>
+              </select>
+            </ControlLabel>
+
+            <button
+              type="button"
+              className="flex w-full items-center justify-between rounded-[var(--radius-control)] border border-line/60 bg-panel/35 px-3 py-3 text-left text-sm text-milk/70 transition hover:border-accent/45"
+              onClick={() => setAdvancedOpen((value) => !value)}
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-accent" />
+                Advanced filters
+              </span>
+              <ChevronDown className={cn("h-4 w-4 transition", advancedOpen ? "rotate-180" : "")} />
+            </button>
+
+            {advancedOpen ? (
+              <div className="space-y-4 rounded-[var(--radius-control)] border border-line/55 bg-shell/30 p-3">
+                <ControlLabel label="source">
+                  <select className="quokka-input h-10 w-full rounded-[var(--radius-control)] px-3 text-sm" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}>
+                    <option value="all">All sources</option>
+                    <option value="official">Official/upstream only</option>
+                    <option value="community">Community GGUF</option>
+                  </select>
+                </ControlLabel>
+
+                <ControlLabel label="sort">
+                  <select className="quokka-input h-10 w-full rounded-[var(--radius-control)] px-3 text-sm" value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+                    <option value="recommendation">Quokka score</option>
+                    <option value="quality">Quality</option>
+                    <option value="speed">Likely speed</option>
+                    <option value="downloads">Downloads</option>
+                    <option value="smallest">Smallest file</option>
+                    <option value="largest">Largest file</option>
+                    <option value="params">Parameter count</option>
+                  </select>
+                </ControlLabel>
+
+                <ControlLabel label="context">
+                  <select className="quokka-input h-10 w-full rounded-[var(--radius-control)] px-3 text-sm" value={contextSize} onChange={(event) => setContextSize(Number(event.target.value))}>
+                    {[4096, 8192, 16384, 32768, 65536].map((value) => (
+                      <option key={value} value={value}>
+                        {value / 1024}K context
+                      </option>
+                    ))}
+                  </select>
+                </ControlLabel>
+
+                <div>
+                  <p className="mb-2 font-mono text-[12px] lowercase tracking-wide text-milk/58">&gt; quick lanes:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {categoryPresets.map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className={cn(
+                          "rounded-full border px-3 py-1.5 text-xs transition hover:border-live/45",
+                          activeCategory === preset.label ? "border-accent/55 bg-accent/12 text-milk" : "border-line/55 bg-panel/35 text-milk/52"
+                        )}
+                        onClick={() => void runSearch(preset.query)}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <ControlLabel label="manual URL">
+                  <Input value={manualReference} onChange={(event) => setManualReference(event.target.value)} placeholder="https://huggingface.co/.../model.gguf" className="quokka-input h-10" />
+                  <Button variant="secondary" className="quokka-control mt-2 h-10 w-full rounded-[var(--radius-control)]" onClick={() => void resolveManual()} disabled={isSearching}>
+                    Resolve URL
+                  </Button>
+                </ControlLabel>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="border-t border-line/55 p-4">
+            <Button variant="primary" className="h-12 w-full rounded-[var(--radius-control)]" onClick={() => void runSearch()} disabled={isSearching}>
+              {isSearching ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Target className="h-4 w-4" />}
+              Find best fit
             </Button>
           </div>
-        </div>
+        </aside>
 
-        <div className="mt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-milk/42">Goal</p>
-          <div className="mt-3 grid gap-2">
-            {goalOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => applyGoal(option.id)}
-                className={cn(
-                  "rounded-[var(--radius-control)] border px-3 py-3 text-left transition hover:border-accent/45",
-                  goal === option.id ? "border-accent/65 bg-accent/12" : "border-line/55 bg-panel/35"
-                )}
-              >
-                <span className="font-semibold text-milk">{option.label}</span>
-                <span className="mt-1 block text-xs leading-5 text-milk/42">{option.hint}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-milk/42">Fit policy</p>
-          <div className="mt-3 grid gap-2">
-            {[
-              { id: "gpu", label: "Full GPU only", hint: "Hide risky offload picks." },
-              { id: "offload", label: "GPU + small offload", hint: "Best practical default." },
-              { id: "any", label: "Show everything", hint: "Include CPU-only and huge models." },
-            ].map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setPolicy(item.id as FitPolicy)}
-                className={cn("rounded-[var(--radius-control)] border px-3 py-2 text-left text-sm transition hover:border-accent/45", policy === item.id ? "border-accent/65 bg-accent/12 text-milk" : "border-line/55 bg-shell/30 text-milk/62")}
-              >
-                <span className="font-semibold">{item.label}</span>
-                <span className="mt-0.5 block text-xs text-milk/40">{item.hint}</span>
-              </button>
-            ))}
-          </div>
-          <label className="mt-4 block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/38">Context cap</span>
-            <select className="quokka-input mt-2 h-10 w-full rounded-[var(--radius-control)] px-3 text-sm" value={contextSize} onChange={(event) => setContextSize(Number(event.target.value))}>
-              {[4096, 8192, 16384, 32768, 65536].map((value) => (
-                <option key={value} value={value}>{value / 1024}K context</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-milk/42">Explore lanes</p>
-          <div className="mt-3 grid max-h-[360px] gap-2 overflow-y-auto pr-1">
-            {categoryPresets.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                className={cn(
-                  "rounded-[var(--radius-control)] border px-3 py-2 text-left transition hover:border-live/45 hover:bg-live/8",
-                  activeCategory === preset.label ? "border-accent/65 bg-accent/12" : "border-line/55 bg-panel/35"
-                )}
-                onClick={() => void runSearch(preset.query)}
-                title={preset.hint}
-              >
-                <span className="text-sm font-semibold text-milk">{preset.label}</span>
-                <span className="mt-0.5 block text-xs text-milk/42">{preset.hint}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-milk/42">Manual URL</p>
-          <Input value={manualReference} onChange={(event) => setManualReference(event.target.value)} placeholder="https://huggingface.co/.../model.gguf" className="quokka-input mt-3" />
-          <Button variant="secondary" className="quokka-control mt-3 w-full rounded-[var(--radius-control)]" onClick={() => void resolveManual()} disabled={isSearching}>
-            Resolve URL
-          </Button>
-        </div>
-      </aside>
-
-      <section className="min-h-0 overflow-y-auto px-5 py-5">
-        {message ? <div className="mb-4 rounded-[var(--radius-control)] border border-accent/35 bg-accent/10 px-4 py-3 text-sm text-milk/70">{message}</div> : null}
-        {error ? <div className="mb-4 rounded-[var(--radius-control)] border border-danger/45 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div> : null}
-
-        <div className="rounded-[var(--radius-soft)] border border-line/70 bg-shell/40 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-accent">Recommendation</p>
-              <h2 className="mt-2 text-2xl font-semibold text-milk">{topPick?.entry.name ?? "Search to calculate a fit"}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
-                {topPick?.best
-                  ? `Best current file: ${topPick.best.file.filename}`
-                  : "Quokka will score models by fit, quality, rough speed, source trust, and your selected use case."}
-              </p>
+        <section className="quokka-terminal grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[var(--radius-control)] border border-line/60">
+          <div className="flex h-14 items-center justify-between border-b border-line/55 px-4">
+            <div className="flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-live" />
+              <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Fit Advisor</p>
+              <span className="font-mono text-xs text-milk/42">{isSearching ? "scanning" : `${policyVisibleEntries.length} visible`}</span>
             </div>
-            {topPick?.best ? <FitBadge fit={topPick.best.fit} /> : null}
+            <p className="hidden font-mono text-xs text-milk/38 md:block">{sourceFilterLabel(sourceFilter)} / {sortLabel(sortMode)}</p>
           </div>
 
-          {topPick?.best ? (
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
-              <Stat label="Score" value={formatNumber(topPick.best.score, 0)} icon={Sparkles} />
-              <Stat label="Need" value={topPick.best.estimatedVramGb ? `${formatNumber(topPick.best.estimatedVramGb, 1)} GB VRAM` : "--"} icon={HardDrive} />
-              <Stat label="Speed" value={topPick.best.estimatedSpeed ? `${formatNumber(topPick.best.estimatedSpeed, 1)} tok/s` : "--"} icon={Gauge} />
-              <Stat label="Quality" value={`${formatNumber(topPick.best.quality, 0)}% est.`} icon={Target} />
-            </div>
-          ) : null}
+          <div className="min-h-0 overflow-y-auto">
+            {message ? <div className="mx-4 mt-4 rounded-[var(--radius-control)] border border-accent/35 bg-accent/10 px-4 py-3 text-sm text-milk/70">{message}</div> : null}
+            {error ? <div className="mx-4 mt-4 rounded-[var(--radius-control)] border border-danger/45 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div> : null}
 
-          {topPick?.best ? (
-            <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px]">
-              <div className="rounded-[var(--radius-control)] border border-line/60 bg-panel/35 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-milk/38">Why this pick</p>
-                <div className="mt-3 grid gap-2 text-sm leading-6 text-milk/58">
-                  {topPick.best.reasons.map((reason) => (
-                    <span key={reason}>- {reason}</span>
-                  ))}
-                </div>
-              </div>
-              <Button variant="primary" className="h-full min-h-20 rounded-[var(--radius-control)]" onClick={() => topPick.best && void downloadFile(topPick.entry, topPick.best.file)}>
-                <Download className="h-4 w-4" />
-                Download recommended GGUF
-              </Button>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-5 rounded-[var(--radius-control)] border border-line/70 bg-shell/38 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm text-milk/52">
-              <SlidersHorizontal className="h-4 w-4 text-accent" />
-              <span>{scoredEntries.length} scored / {entries.length} repos</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select className="quokka-input h-9 rounded-[var(--radius-control)] px-3 text-xs" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}>
-                <option value="all">All sources</option>
-                <option value="official">Official/upstream only</option>
-                <option value="community">Community GGUF</option>
-              </select>
-              <select className="quokka-input h-9 rounded-[var(--radius-control)] px-3 text-xs" value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-                <option value="recommendation">Sort: Quokka score</option>
-                <option value="quality">Sort: quality</option>
-                <option value="speed">Sort: speed</option>
-                <option value="downloads">Sort: downloads</option>
-                <option value="smallest">Sort: smallest</option>
-                <option value="largest">Sort: largest</option>
-                <option value="params">Sort: params</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {scoredEntries.length ? (
-          <div className="mt-5 space-y-6">
-            <section>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-accent">Fits fully in VRAM</p>
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {(fullGpuLane.length ? fullGpuLane : scoredEntries.slice(0, 6)).map((item) => <EntryMiniCard key={`fit-${item.entry.repo_id}`} item={item} onDownload={downloadFile} />)}
-              </div>
-            </section>
-            <section>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-live">Fastest likely</p>
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {speedLane.map((item) => <EntryMiniCard key={`speed-${item.entry.repo_id}`} item={item} onDownload={downloadFile} />)}
-              </div>
-            </section>
-            <section>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-milk/45">High quality quants</p>
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {qualityLane.map((item) => <EntryMiniCard key={`quality-${item.entry.repo_id}`} item={item} onDownload={downloadFile} />)}
-              </div>
-            </section>
-          </div>
-        ) : null}
-
-        <div className="mt-6 grid gap-4">
-          {scoredEntries.map((item) => (
-            <article key={item.entry.repo_id} className="rounded-[var(--radius-control)] border border-line/70 bg-shell/40 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-lg font-semibold text-milk">{item.entry.name}</h3>
-                    <span className="quokka-pill px-2 py-1 text-xs text-accent">{item.sourceLabel}</span>
-                    {item.paramsB ? <span className="quokka-pill px-2 py-1 text-xs text-milk/52">{item.paramsB}B params</span> : null}
+            <div className="border-b border-line/55 px-4 py-4">
+              {topPick?.best ? (
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_190px]">
+                  <div className="min-w-0">
+                    <TerminalLine tag="SCAN" tone="text-live">
+                      {primaryGpu?.name ?? "GPU telemetry unavailable"} / {gpuTotalGb ? `${formatNumber(gpuTotalGb, 1)}GB VRAM` : "unknown VRAM"} / ctx {contextSize / 1024}K
+                    </TerminalLine>
+                    <TerminalLine tag="GOAL" tone="text-accent">
+                      {goalLabel(goal)} / {policyLabel(policy)} / {sourceFilterLabel(sourceFilter)}
+                    </TerminalLine>
+                    <TerminalLine tag="BEST" tone="text-success">
+                      <span className="font-semibold text-milk">{topPick.entry.name}</span>
+                    </TerminalLine>
+                    <TerminalLine tag="FIT" tone={topFit?.rank && topFit.rank >= 4 ? "text-success" : topFit?.rank === 3 ? "text-warning" : "text-danger"}>
+                      {topPick.best.fit.label} / needs {topPick.best.estimatedVramGb ? `${formatNumber(topPick.best.estimatedVramGb, 1)}GB` : "--"} VRAM / est.{" "}
+                      {topPick.best.estimatedSpeed ? `${formatNumber(topPick.best.estimatedSpeed, 1)} tok/s` : "--"}
+                    </TerminalLine>
+                    <TerminalLine tag="WHY" tone="text-milk/42">
+                      {topPick.best.reasons[0]}
+                    </TerminalLine>
                   </div>
-                  <p className="mt-1 break-all font-mono text-xs text-live/75">{item.entry.repo_id}</p>
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-milk/50">{item.entry.description ?? "Hugging Face GGUF model repository."}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {item.best ? <FitBadge fit={item.best.fit} /> : null}
-                  <Button variant="ghost" size="sm" onClick={() => window.quokkaDesktop?.openExternal?.(`https://huggingface.co/${item.entry.repo_id}`)}>
-                    <ExternalLink className="h-4 w-4" />
-                    HF
-                  </Button>
-                </div>
-              </div>
-              {item.best ? (
-                <div className="mt-4 rounded-[var(--radius-control)] border border-accent/25 bg-accent/8 px-3 py-3">
-                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_90px_90px_90px_150px] md:items-center">
-                    <span className="truncate font-mono text-sm text-milk/82">{item.best.file.filename}</span>
-                    <span className="text-sm text-accent">{item.best.file.quantization ?? "GGUF"}</span>
-                    <span className="text-sm text-milk/55">{bytesToLabel(item.best.file.size_bytes)}</span>
-                    <span className={cn("text-sm", item.best.fit.tone)}>{item.best.estimatedVramGb ? `~${formatNumber(item.best.estimatedVramGb, 1)}GB` : "--"}</span>
-                    <Button variant="primary" size="sm" className="rounded-[var(--radius-control)]" onClick={() => item.best && void downloadFile(item.entry, item.best.file)}>
+                  <div className="flex flex-col gap-2">
+                    <FitBadge fit={topPick.best.fit} />
+                    <Button variant="primary" className="h-12 rounded-[var(--radius-control)]" onClick={() => topPick.best && void downloadFile(topPick.entry, topPick.best.file)}>
                       <Download className="h-4 w-4" />
-                      Best GGUF
+                      Download best
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="quokka-control h-10 rounded-[var(--radius-control)]"
+                      onClick={() => window.quokkaDesktop?.openExternal?.(`https://huggingface.co/${topPick.entry.repo_id}`)}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Open HF
                     </Button>
                   </div>
                 </div>
-              ) : null}
-              <div className="mt-3 grid gap-2">
-                {item.entry.files
-                  .map((file) => scoreFile(item.entry, file, { goal, policy, contextSize, gpuTotalGb, ramTotalGb }))
-                  .sort((left, right) => right.score - left.score)
-                  .slice(0, 6)
-                  .map((fileScore) => (
-                    <div key={fileScore.file.filename} className="grid gap-3 rounded-[var(--radius-control)] border border-line/45 bg-panel/30 px-3 py-2 md:grid-cols-[minmax(0,1fr)_80px_76px_116px_84px_128px] md:items-center">
-                      <span className="truncate font-mono text-xs text-milk/62">{fileScore.file.filename}</span>
-                      <span className="text-xs text-accent">{fileScore.file.quantization ?? "GGUF"}</span>
-                      <span className="text-xs text-milk/42">{bytesToLabel(fileScore.file.size_bytes)}</span>
-                      <span className={cn("text-xs", fileScore.fit.tone)}>{fileScore.fit.label}</span>
-                      <span className="text-xs text-milk/48">{fileScore.estimatedSpeed ? `${formatNumber(fileScore.estimatedSpeed, 1)} tok/s` : "--"}</span>
-                      <Button variant="secondary" size="sm" className="quokka-control rounded-[var(--radius-control)]" onClick={() => void downloadFile(item.entry, fileScore.file)}>
-                        Download
-                      </Button>
-                    </div>
-                  ))}
-              </div>
-            </article>
-          ))}
+              ) : (
+                <div className="grid min-h-[220px] place-items-center text-center">
+                  <div>
+                    <Library className="mx-auto h-8 w-8 text-accent" />
+                    <p className="mt-4 text-lg font-semibold text-milk">Choose a goal, then scan</p>
+                    <p className="mt-2 max-w-md text-sm leading-6 text-milk/48">Quokka will keep the first screen simple: one best pick, why it fits, then a clean list of alternatives.</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
-          {!entries.length ? (
-            <div className="grid min-h-[360px] place-items-center rounded-[var(--radius-control)] border border-dashed border-line/70 bg-shell/35 text-center">
+            {policyVisibleEntries.length ? (
               <div>
-                <Library className="mx-auto h-8 w-8 text-accent" />
-                <p className="mt-4 text-lg font-semibold text-milk">Choose a goal or search Hugging Face</p>
-                <p className="mt-2 text-sm text-milk/48">Quokka will calculate fit, speed, quality, and recommended quantization.</p>
+                <div className="grid border-b border-line/55 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.16em] text-milk/34 xl:grid-cols-[44px_minmax(0,1fr)_110px_92px_96px_112px]">
+                  <span>#</span>
+                  <span>Model</span>
+                  <span>Fit</span>
+                  <span>Quant</span>
+                  <span>Need</span>
+                  <span>Action</span>
+                </div>
+                {policyVisibleEntries.map((item, index) => (
+                  <ResultRow key={item.entry.repo_id} item={item} index={index} variants={variantScores(item)} onDownload={downloadFile} />
+                ))}
               </div>
-            </div>
-          ) : null}
-          {entries.length > 0 && !scoredEntries.length ? (
-            <div className="rounded-[var(--radius-control)] border border-line/70 bg-shell/35 px-4 py-10 text-center text-sm text-milk/50">
-              Nothing matches this source filter. Try All sources or another goal.
-            </div>
-          ) : null}
-        </div>
-      </section>
-
-      <aside className="min-h-0 overflow-y-auto border-t border-line/65 bg-shell/35 px-5 py-5 xl:border-l xl:border-t-0">
-        <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Detected hardware</p>
-          <div className="mt-4 grid gap-3">
-            <Stat label="GPU" value={primaryGpu?.name ?? "Not detected"} icon={MonitorDown} />
-            <Stat label="VRAM" value={gpuTotalGb ? `${formatNumber(gpuTotalGb, 1)} GB` : "--"} icon={HardDrive} />
-            <Stat label="RAM" value={ramTotalGb ? `${formatNumber(ramTotalGb, 1)} GB` : "--"} icon={Cpu} />
-            <Stat label="Policy" value={policy === "gpu" ? "Full GPU" : policy === "offload" ? "GPU + offload" : "Show all"} icon={Target} />
+            ) : entries.length ? (
+              <div className="px-4 py-10 text-center text-sm text-milk/50">Nothing matches this filter. Try "All sources" or "Show everything".</div>
+            ) : null}
           </div>
-        </div>
+        </section>
 
-        <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Fit scale</p>
-          <div className="mt-3 grid gap-2 text-sm text-milk/56">
-            <span><b className="text-success">Full GPU</b> - best speed, safest path.</span>
-            <span><b className="text-success">GPU fit</b> - should work, less headroom.</span>
-            <span><b className="text-warning">Offload fit</b> - works but slower.</span>
-            <span><b className="text-milk/70">CPU possible</b> - fallback, slow.</span>
-            <span><b className="text-danger">Too large</b> - avoid for this PC.</span>
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between gap-3">
+        <aside className="quokka-surface min-h-0 overflow-y-auto rounded-[var(--radius-control)] px-5 py-5">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Downloads</p>
-            <p className="mt-1 break-all text-xs text-milk/42">{targetDir || "Default: Quokka data/models folder"}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Hardware fit</p>
+            <RailMetric icon={MonitorDown} label="GPU" value={primaryGpu?.name ?? "Not detected"} hint={primaryGpu?.memory_total_mb ? "CUDA telemetry available" : "No GPU telemetry"} />
+            <RailMetric icon={HardDrive} label="VRAM" value={gpuTotalGb ? `${formatNumber(gpuTotalGb, 1)} GB` : "--"} hint={topPick?.best?.estimatedVramGb ? `best needs ~${formatNumber(topPick.best.estimatedVramGb, 1)} GB` : "waiting for scan"} />
+            <RailMetric icon={Cpu} label="RAM" value={ramTotalGb ? `${formatNumber(ramTotalGb, 1)} GB` : "--"} hint={policy === "offload" ? "offload allowed" : policyLabel(policy)} />
+            <RailMetric icon={Zap} label="Speed" value={topPick?.best?.estimatedSpeed ? `${formatNumber(topPick.best.estimatedSpeed, 1)} tok/s` : "--"} hint="rough estimate before benchmark" />
           </div>
-          <Button variant="secondary" size="icon" className="quokka-control rounded-[var(--radius-control)]" onClick={chooseDownloadFolder} title="Choose download folder">
-            <FolderOpen className="h-4 w-4" />
-          </Button>
-        </div>
 
-        <div className="mt-4 space-y-3">
-          {downloads.map((download) => (
-            <div key={download.id} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-3">
-              <div className="flex items-start gap-2">
-                {download.status === "completed" ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" /> : download.status === "failed" ? <XCircle className="mt-0.5 h-4 w-4 text-danger" /> : <LoaderCircle className="mt-0.5 h-4 w-4 animate-spin text-live" />}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-milk">{download.label}</p>
-                  <p className="mt-1 truncate text-xs text-milk/42">{download.file_name}</p>
+          <div className="mt-5 rounded-[var(--radius-control)] border border-line/60 bg-shell/32 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Fit scale</p>
+            <div className="mt-3 space-y-2 text-sm leading-6 text-milk/56">
+              <p><span className="text-success">Full GPU</span> - safest and fastest.</p>
+              <p><span className="text-warning">Offload</span> - usable, slower.</p>
+              <p><span className="text-danger">Too large</span> - likely OOM.</p>
+            </div>
+          </div>
+
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Downloads</p>
+              <p className="mt-1 truncate text-xs text-milk/42">{targetDir || "Default Quokka models folder"}</p>
+            </div>
+            <Button variant="secondary" size="icon" className="quokka-control rounded-[var(--radius-control)]" onClick={chooseDownloadFolder} title="Choose download folder">
+              <FolderOpen className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="mt-3 space-y-3">
+            {downloads.slice(0, 8).map((download) => (
+              <div key={download.id} className="rounded-[var(--radius-control)] border border-line/60 bg-panel/35 p-3">
+                <div className="flex items-start gap-2">
+                  {download.status === "completed" ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
+                  ) : download.status === "failed" ? (
+                    <XCircle className="mt-0.5 h-4 w-4 text-danger" />
+                  ) : (
+                    <LoaderCircle className="mt-0.5 h-4 w-4 animate-spin text-live" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-milk">{download.label}</p>
+                    <p className="mt-1 truncate text-xs text-milk/42">{download.file_name}</p>
+                  </div>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-milk/8">
+                  <div className={cn("h-full rounded-full", download.status === "failed" ? "bg-danger" : download.status === "completed" ? "bg-success" : "bg-live")} style={{ width: `${Math.max(2, download.progress_percent)}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-milk/45">{download.status} / {formatNumber(download.progress_percent, 1)}%</p>
+                {download.error ? <p className="mt-2 text-xs text-danger">{download.error}</p> : null}
+                <div className="mt-3 flex gap-2">
+                  {download.status === "completed" ? (
+                    <Button variant="primary" size="sm" className="flex-1 rounded-[var(--radius-control)]" onClick={() => void addDownloadedModel(download)}>
+                      Add
+                    </Button>
+                  ) : null}
+                  {download.status === "queued" || download.status === "downloading" ? (
+                    <Button variant="secondary" size="sm" className="flex-1 rounded-[var(--radius-control)]" onClick={() => void api.cancelModelDownload(download.id).then(refreshDownloads)}>
+                      Cancel
+                    </Button>
+                  ) : null}
                 </div>
               </div>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-milk/8">
-                <div className={cn("h-full rounded-full", download.status === "failed" ? "bg-danger" : download.status === "completed" ? "bg-success" : "bg-live")} style={{ width: `${Math.max(2, download.progress_percent)}%` }} />
+            ))}
+            {!downloads.length ? (
+              <div className="rounded-[var(--radius-control)] border border-dashed border-line/60 bg-shell/30 px-3 py-8 text-center text-sm text-milk/45">
+                Downloads appear here.
               </div>
-              <p className="mt-2 text-xs text-milk/45">{download.status} / {formatNumber(download.progress_percent, 1)}%</p>
-              {download.error ? <p className="mt-2 text-xs text-danger">{download.error}</p> : null}
-              <div className="mt-3 flex gap-2">
-                {download.status === "completed" ? (
-                  <Button variant="primary" size="sm" className="flex-1 rounded-[var(--radius-control)]" onClick={() => void addDownloadedModel(download)}>
-                    Add to Local Panel
-                  </Button>
-                ) : null}
-                {download.status === "queued" || download.status === "downloading" ? (
-                  <Button variant="secondary" size="sm" className="flex-1 rounded-[var(--radius-control)]" onClick={() => void api.cancelModelDownload(download.id).then(refreshDownloads)}>
-                    Cancel
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-          {!downloads.length ? (
-            <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/35 px-3 py-8 text-center text-sm text-milk/45">
-              Downloads will appear here.
-            </div>
-          ) : null}
-        </div>
-
-        <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-panel/42 p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">After download</p>
-          <div className="mt-3 grid gap-2 text-sm text-milk/56">
-            <span>1. Add to Local Panel</span>
-            <span>2. Run Health Doctor</span>
-            <span>3. Test Launch</span>
-            <span>4. Save profile if stable</span>
+            ) : null}
+            {downloads.length > 8 ? <p className="text-center text-xs text-milk/36">Showing latest 8 downloads.</p> : null}
           </div>
-        </div>
-      </aside>
+
+          <div className="mt-5 rounded-[var(--radius-control)] border border-line/60 bg-shell/32 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Next step</p>
+            <div className="mt-3 space-y-2 text-sm leading-6 text-milk/56">
+              <p>Download GGUF.</p>
+              <p>Add to Local Panel.</p>
+              <p>Run Health Doctor and Test Launch.</p>
+            </div>
+            {runningDownloads ? <p className="mt-3 font-mono text-xs text-live">{runningDownloads} active download(s)</p> : null}
+          </div>
+        </aside>
+      </div>
     </main>
   );
 }
