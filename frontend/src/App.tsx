@@ -1,14 +1,15 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { AlertTriangle, Bot, FlaskConical, MessageSquare, PanelLeft, Settings } from "lucide-react";
+import { AlertTriangle, FlaskConical, MessageSquare, PanelLeft, Settings } from "lucide-react";
 
 import { ControlPanel } from "@/components/control/control-panel";
+import { TopStatusBar } from "@/components/app/top-status-bar";
+import { AddModelDialog } from "@/components/dashboard/add-model-dialog";
 import type { MetricId } from "@/components/dashboard/metric-detail-dialog";
+import { RuntimeErrorBoundary } from "@/components/runtime-error-boundary";
 import { useQuokkaDashboard } from "@/hooks/use-quokka-dashboard";
 import { formatTimestamp } from "@/lib/utils";
 
 const ChatWorkspace = lazy(() => import("@/components/chat/chat-workspace").then((module) => ({ default: module.ChatWorkspace })));
-const AgentLab = lazy(() => import("@/components/agent/agent-lab").then((module) => ({ default: module.AgentLab })));
-const AddModelDialog = lazy(() => import("@/components/dashboard/add-model-dialog").then((module) => ({ default: module.AddModelDialog })));
 const BenchmarkDialog = lazy(() => import("@/components/dashboard/benchmark-dialog").then((module) => ({ default: module.BenchmarkDialog })));
 const MetricDetailDialog = lazy(() => import("@/components/dashboard/metric-detail-dialog").then((module) => ({ default: module.MetricDetailDialog })));
 
@@ -33,9 +34,9 @@ const settingsSections = [
     body: "Default max tokens, context indicator behavior, attachment limits, and answer timeout will live here.",
   },
   {
-    title: "Agent Lab",
-    eyebrow: "Codex mode",
-    body: "Workspace roots, approval gates, terminal policy, diff preview, and reusable task memory.",
+    title: "Quokka Lab bridge",
+    eyebrow: "External Lab",
+    body: "Running model discovery for the standalone Quokka Lab app is exposed at /api/lab/models.",
   },
   {
     title: "Benchmarks",
@@ -69,9 +70,8 @@ function LazyPanelFallback({ label }: { label: string }) {
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.localStorage.getItem("quokka.sidebar.open") !== "0");
-  const [mode, setMode] = useState<"control" | "chat" | "agent" | "tests" | "settings">("control");
+  const [mode, setMode] = useState<"control" | "chat" | "tests" | "settings">("control");
   const [chatMounted, setChatMounted] = useState(false);
-  const [agentMounted, setAgentMounted] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => window.localStorage.getItem("quokka.theme") ?? "quokka");
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId | null>(null);
@@ -109,9 +109,6 @@ function App() {
   useEffect(() => {
     if (mode === "chat") {
       setChatMounted(true);
-    }
-    if (mode === "agent") {
-      setAgentMounted(true);
     }
   }, [mode]);
 
@@ -154,7 +151,6 @@ function App() {
                 {[
                   { id: "control", label: "Local Panel", icon: PanelLeft },
                   { id: "chat", label: "Chat", icon: MessageSquare },
-                  { id: "agent", label: "Agent Lab", icon: Bot },
                   { id: "tests", label: "LLM Tests", icon: FlaskConical },
                   { id: "settings", label: "Settings", icon: Settings },
                 ].map(({ id, label, icon: Icon }) => (
@@ -179,7 +175,7 @@ function App() {
           </aside>
         </div>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-4 md:px-6 2xl:px-7">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-4 pt-3 md:px-6 2xl:px-7">
           <div className="mb-4 flex flex-wrap gap-2 border-b border-line/70 pb-4 lg:hidden">
                 <button
                   className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
@@ -199,14 +195,6 @@ function App() {
                 </button>
                 <button
                   className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-                    mode === "agent" ? "border-accent bg-accent text-[#171410]" : "border-line bg-white/[0.03] text-milk/62"
-                  }`}
-                  onClick={() => setMode("agent")}
-                >
-                  Agent Lab
-                </button>
-                <button
-                  className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                     mode === "tests" ? "border-accent bg-accent text-[#171410]" : "border-line bg-white/[0.03] text-milk/62"
                   }`}
                   onClick={() => setMode("tests")}
@@ -223,8 +211,17 @@ function App() {
                 </button>
           </div>
 
+          <TopStatusBar
+            mode={mode}
+            selectedModel={selectedModel}
+            models={models}
+            metrics={metrics}
+            onOpenAddModel={() => setAddModelOpen(true)}
+            onOpenTests={() => setMode("tests")}
+          />
+
         {error ? (
-          <div className="mt-4 flex items-center gap-3 rounded-lg border border-danger/45 bg-danger/10 px-4 py-3 text-sm text-milk">
+          <div className="mt-3 flex items-center gap-3 rounded-lg border border-danger/45 bg-danger/10 px-4 py-3 text-sm text-milk">
             <AlertTriangle className="h-4 w-4 text-danger" />
             <span>{error}</span>
           </div>
@@ -234,14 +231,6 @@ function App() {
           <div className={mode === "chat" ? "contents" : "hidden"}>
             <Suspense fallback={<LazyPanelFallback label="Loading Chat..." />}>
               <ChatWorkspace models={models} />
-            </Suspense>
-          </div>
-        ) : null}
-
-        {agentMounted ? (
-          <div className={mode === "agent" ? "contents" : "hidden"}>
-            <Suspense fallback={<LazyPanelFallback label="Loading Agent Lab..." />}>
-              <AgentLab models={models} />
             </Suspense>
           </div>
         ) : null}
@@ -341,9 +330,9 @@ function App() {
         </Suspense>
       ) : null}
       {addModelOpen ? (
-        <Suspense fallback={null}>
+        <RuntimeErrorBoundary fallbackTitle="Add Model failed to render" onReset={() => setAddModelOpen(false)}>
           <AddModelDialog open={addModelOpen} models={models} onClose={() => setAddModelOpen(false)} onAdded={refreshDashboard} />
-        </Suspense>
+        </RuntimeErrorBoundary>
       ) : null}
     </div>
   );

@@ -44,6 +44,30 @@ Requirements:
 - Node.js LTS
 - Python 3.11+
 
+## Quokka Lab Integration
+
+Quokka is now the local model control app. The coding-agent workspace lives in the separate Quokka Lab app.
+
+When a model is started in Quokka, Quokka Lab can discover it through:
+
+```text
+GET http://127.0.0.1:8000/api/lab/models
+```
+
+By default this returns only ready/running inference endpoints. Use this during polling in Quokka Lab:
+
+```powershell
+curl http://127.0.0.1:8000/api/lab/models
+```
+
+Use `?ready_only=false` to show stopped/unhealthy models too:
+
+```text
+GET http://127.0.0.1:8000/api/lab/models?ready_only=false
+```
+
+Each item includes the Quokka model id, display name, provider, endpoint, runtime status, `api_format`, `model_name`, and `chat_url`. Quokka Lab should use `chat_url` plus `model_name` to send local inference requests.
+
 ## Stack
 
 Backend:
@@ -138,6 +162,7 @@ The backend exposes:
 - `POST /api/models/{model_id}/restart`
 - `GET /api/models/{model_id}/logs`
 - `GET /api/models/{model_id}/health`
+- `GET /api/lab/models`
 - `GET /api/models/{model_id}/profiles`
 - `POST /api/models/{model_id}/profiles`
 - `PUT /api/models/{model_id}/profiles/{profile_id}`

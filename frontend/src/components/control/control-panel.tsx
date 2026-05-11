@@ -225,8 +225,8 @@ function MetricTile({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex h-[118px] min-w-0 flex-col justify-between bg-panel/70 px-5 py-4 text-left transition-colors",
-        onClick ? "hover:bg-panel-2/80" : "cursor-default",
+        "quokka-panel flex h-[108px] w-full min-w-0 flex-col justify-between overflow-hidden rounded-[var(--radius-control)] px-4 py-3 text-left transition-colors",
+        onClick ? "hover:border-accent/45 hover:bg-panel-2/70" : "cursor-default",
         active && "bg-panel-2"
       )}
     >
@@ -235,11 +235,11 @@ function MetricTile({
       </div>
       <div className="min-w-0">
         <p className="truncate text-2xl font-semibold text-milk">{value}</p>
-        {subvalue ? <p className="mt-2 truncate text-sm text-milk/60">{subvalue}</p> : null}
+        {subvalue ? <p className="mt-1 truncate text-sm text-milk/60">{subvalue}</p> : null}
       </div>
       {meterPercent !== null && meterPercent !== undefined ? (
         <div className="flex items-center gap-3">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-black/30">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/30">
             <div
               className="h-full rounded-full bg-accent transition-all duration-200"
               style={{ width: `${Math.min(Math.max(meterPercent, 0), 100)}%` }}
@@ -570,10 +570,10 @@ export function ControlPanel({
   ];
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="grid shrink-0 grid-cols-1 overflow-hidden border border-line bg-panel/60 md:grid-cols-2 xl:grid-cols-[repeat(5,minmax(0,1fr))]">
-        {metricTiles.map((tile, index) => (
-          <div key={tile.id} className={cn("min-w-0", index < metricTiles.length - 1 && "border-b border-line xl:border-b-0 xl:border-r")}>
+    <section className="mt-3 flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="grid shrink-0 grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[repeat(5,minmax(0,1fr))]">
+        {metricTiles.map((tile) => (
+          <div key={tile.id} className="min-w-0">
             <MetricTile
               label={tile.label}
               value={tile.value}
@@ -586,9 +586,9 @@ export function ControlPanel({
         ))}
       </div>
 
-      <div className="mt-4 grid min-h-0 flex-1 grid-cols-[360px_minmax(0,1fr)] gap-5 overflow-hidden 2xl:grid-cols-[390px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col overflow-hidden border border-line bg-[#0f0f0f]">
-          <div className="border-b border-line px-4 py-4">
+      <div className="mt-3 grid min-h-0 flex-1 grid-cols-[360px_minmax(0,1fr)] gap-4 overflow-hidden 2xl:grid-cols-[390px_minmax(0,1fr)]">
+        <aside className="quokka-surface flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-control)]">
+          <div className="border-b border-line/60 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-milk/48">Model list</p>
@@ -597,7 +597,7 @@ export function ControlPanel({
               <button
                 type="button"
                 onClick={onOpenAddModel}
-                className="flex h-10 items-center justify-center border border-line bg-black/20 px-4 text-sm font-semibold uppercase tracking-[0.14em] text-milk transition-colors hover:border-accent hover:bg-accent/10 hover:text-accent"
+                className="quokka-control flex h-10 items-center justify-center px-4 text-sm font-semibold uppercase tracking-[0.14em] text-milk transition-colors hover:border-accent hover:bg-accent/10 hover:text-accent"
               >
                 + Add model
               </button>
@@ -617,8 +617,8 @@ export function ControlPanel({
                 <div
                   key={model.id}
                   className={cn(
-                    "group relative border-b border-line px-4 py-4 transition-colors",
-                    active ? "bg-[#151515]" : "hover:bg-[#131313]"
+                    "group relative border-b border-line/55 px-4 py-4 transition-colors",
+                    active ? "bg-panel-2/60" : "hover:bg-panel-2/34"
                   )}
                 >
                   <div className={cn("absolute inset-y-0 left-0 w-px bg-transparent transition-colors", active || pinned ? "bg-accent" : "group-hover:bg-accent/55")} />
@@ -712,7 +712,7 @@ export function ControlPanel({
           </div>
         </aside>
 
-        <section className="flex min-h-0 flex-col overflow-hidden border border-line bg-[#0f0f0f]">
+        <section className="quokka-surface flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-control)]">
           {selectedModel ? (
             <>
               <div className="border-b border-line px-5 py-5">
@@ -1148,8 +1148,36 @@ export function ControlPanel({
               </div>
             </>
           ) : (
-            <div className="flex h-full items-center justify-center border border-dashed border-line bg-[#0f0f0f] text-milk/45">
-              Select a model from the left list to inspect it.
+            <div className="flex h-full items-center justify-center px-6">
+              <div className="max-w-lg text-center">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-accent">No model selected</p>
+                <h2 className="mt-3 text-2xl font-semibold text-milk">Connect a local LLM</h2>
+                <p className="mt-3 text-sm leading-6 text-milk/52">
+                  Drop in a GGUF, scan a Windows drive like D:\, import Ollama, or open LLM Tests once a model is ready.
+                  Quokka will keep the running endpoint visible for Chat and Quokka Lab.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={onOpenAddModel}
+                    className="quokka-control px-4 py-2 text-sm font-semibold text-milk transition hover:border-accent/70 hover:text-accent"
+                  >
+                    Add local model
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onOpenTests}
+                    className="quokka-control px-4 py-2 text-sm font-semibold text-milk/70 transition hover:border-live/70 hover:text-live"
+                  >
+                    Open LLM Tests
+                  </button>
+                </div>
+                <div className="mt-6 grid gap-2 text-left text-xs text-milk/46 sm:grid-cols-3">
+                  <span className="quokka-pill px-3 py-2">Scan GGUF folders</span>
+                  <span className="quokka-pill px-3 py-2">Use Windows runtime</span>
+                  <span className="quokka-pill px-3 py-2">Expose /api/lab/models</span>
+                </div>
+              </div>
             </div>
           )}
         </section>

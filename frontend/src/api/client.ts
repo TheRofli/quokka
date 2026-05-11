@@ -1,9 +1,5 @@
 import type {
   AppConfig,
-  AgentRunRequest,
-  AgentRunResponse,
-  AgentRunStatusResponse,
-  AgentWorkspaceReviewResponse,
   BenchmarkRunRequest,
   BenchmarkRunResponse,
   ChatCompletionRequest,
@@ -129,37 +125,6 @@ export const api = {
     }),
   streamChatCompletion: (payload: ChatCompletionRequest, onEvent: (event: ChatStreamEvent) => void) =>
     streamRequest("/chat/completion/stream", payload, onEvent),
-  runAgent: (payload: AgentRunRequest, signal?: AbortSignal) =>
-    request<AgentRunResponse>("/agent/run", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      signal,
-    }),
-  startAgentRun: (payload: AgentRunRequest) =>
-    request<AgentRunStatusResponse>("/agent/runs", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  listAgentRuns: (workspacePath?: string) =>
-    request<AgentRunStatusResponse[]>(
-      `/agent/runs${workspacePath ? `?workspace_path=${encodeURIComponent(workspacePath)}` : ""}`
-    ),
-  getAgentRun: (runId: string) => request<AgentRunStatusResponse>(`/agent/runs/${runId}`),
-  cancelAgentRun: (runId: string) =>
-    request<AgentRunStatusResponse>(`/agent/runs/${runId}/cancel`, {
-      method: "POST",
-    }),
-  approveAgentRun: (runId: string, action: "approve" | "reject" | "generate_patch" | "apply" | "retry_patch", note?: string) =>
-    request<AgentRunStatusResponse>(`/agent/runs/${runId}/approval`, {
-      method: "POST",
-      body: JSON.stringify({ action, note }),
-    }),
-  getAgentReview: (workspacePath: string) =>
-    request<AgentWorkspaceReviewResponse>("/agent/review", {
-      method: "POST",
-      body: JSON.stringify({ workspace_path: workspacePath }),
-    }),
-  getAgentRunReview: (runId: string) => request<AgentWorkspaceReviewResponse>(`/agent/runs/${runId}/review`),
   getMetricHistory: (minutes = 60) => request<MetricHistoryPoint[]>(`/system/metrics/history?minutes=${minutes}`),
   getModels: () => request<ModelView[]>("/models"),
   discoverModels: (query = "", limit = 80) =>

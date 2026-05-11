@@ -128,6 +128,24 @@ class ModelView(BaseModel):
     supported_actions: list[str]
 
 
+class LabModelConnection(BaseModel):
+    id: str
+    name: str
+    provider: ProviderType
+    modality: str
+    endpoint: str
+    status: ModelStatus
+    ready: bool = False
+    health_ok: bool | None = None
+    model_name: str
+    api_format: str
+    chat_url: str
+    context_size: int | None = None
+    prompt_tokens_per_second: float | None = None
+    decode_tokens_per_second: float | None = None
+    notes: list[str] = Field(default_factory=list)
+
+
 class ChatAttachment(BaseModel):
     name: str
     mime_type: str
@@ -163,135 +181,6 @@ class ChatCompletionResponse(BaseModel):
     finish_reason: str | None = None
     truncated: bool = False
     max_tokens: int
-
-
-class AgentSettings(BaseModel):
-    agent_max_tokens: int = Field(default=4096, ge=256, le=32768)
-    patch_max_tokens: int = Field(default=4096, ge=512, le=32768)
-    context_budget_percent: int = Field(default=70, ge=10, le=95)
-    auto_compact: bool = True
-    keep_last_messages: int = Field(default=12, ge=2, le=80)
-    file_context_limit_kb: int = Field(default=4096, ge=64, le=16384)
-    approval_mode: str = Field(default="review", pattern="^(review|auto_readonly|manual)$")
-
-
-class AgentRunRequest(BaseModel):
-    model_id: str
-    workspace_path: str
-    prompt: str = Field(min_length=1, max_length=12000)
-    attachments: list[ChatAttachment] = Field(default_factory=list)
-    settings: AgentSettings = Field(default_factory=AgentSettings)
-
-
-class AgentWorkspaceFile(BaseModel):
-    path: str
-    size_bytes: int
-    included: bool = False
-    reason: str | None = None
-
-
-class AgentRunStep(BaseModel):
-    title: str
-    status: str = "completed"
-    detail: str | None = None
-
-
-class AgentRunResponse(BaseModel):
-    id: str
-    model_id: str
-    model_name: str
-    workspace_path: str
-    created_at: datetime
-    content: str
-    thinking_content: str | None = None
-    thinking_tokens_estimate: int | None = None
-    used_context_tokens_estimate: int = 0
-    context_budget_tokens: int = 0
-    inspected_files: list[AgentWorkspaceFile] = Field(default_factory=list)
-    included_files: list[AgentWorkspaceFile] = Field(default_factory=list)
-    steps: list[AgentRunStep] = Field(default_factory=list)
-    settings: AgentSettings = Field(default_factory=AgentSettings)
-    warning: str | None = None
-
-
-class AgentPlanItem(BaseModel):
-    id: str
-    title: str
-    status: str = "queued"
-    detail: str | None = None
-
-
-class AgentRunEvent(BaseModel):
-    id: str
-    index: int
-    timestamp: datetime
-    type: str
-    title: str
-    detail: str | None = None
-    status: str = "info"
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class AgentRunMessage(BaseModel):
-    id: str
-    timestamp: datetime
-    type: str
-    content: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class AgentApprovalRequest(BaseModel):
-    action: str = Field(default="approve", pattern="^(approve|reject|generate_patch|apply|retry_patch)$")
-    note: str | None = Field(default=None, max_length=2000)
-
-
-class AgentWorkspaceReviewRequest(BaseModel):
-    workspace_path: str
-
-
-class AgentDiffFile(BaseModel):
-    path: str
-    status: str
-    additions: int = 0
-    deletions: int = 0
-    binary: bool = False
-
-
-class AgentWorkspaceReviewResponse(BaseModel):
-    workspace_path: str
-    is_git_repo: bool
-    summary: str
-    files: list[AgentDiffFile] = Field(default_factory=list)
-    diff: str = ""
-    status_lines: list[str] = Field(default_factory=list)
-    insertions: int = 0
-    deletions: int = 0
-    error: str | None = None
-
-
-class AgentRunStatusResponse(BaseModel):
-    id: str
-    status: str = "queued"
-    prompt: str
-    model_id: str
-    model_name: str | None = None
-    workspace_path: str
-    created_at: datetime
-    updated_at: datetime
-    finished_at: datetime | None = None
-    plan: list[AgentPlanItem] = Field(default_factory=list)
-    events: list[AgentRunEvent] = Field(default_factory=list)
-    messages: list[AgentRunMessage] = Field(default_factory=list)
-    edits: list[AgentDiffFile] = Field(default_factory=list)
-    patch_preview: AgentWorkspaceReviewResponse | None = None
-    pending_patch_operations: list[dict[str, Any]] = Field(default_factory=list, exclude=True)
-    result: AgentRunResponse | None = None
-    review: AgentWorkspaceReviewResponse | None = None
-    error: str | None = None
-    approval_required: bool = False
-    approval_status: str = "not_required"
-    live_thinking: str | None = None
-    live_content: str | None = None
 
 
 class GpuDeviceMetrics(BaseModel):

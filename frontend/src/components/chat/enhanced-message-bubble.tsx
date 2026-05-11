@@ -22,7 +22,7 @@ type MarkdownCodeProps = MarkdownChildrenProps & {
   className?: string;
 };
 
-function MarkdownText({ content }: { content: string }) {
+export function MarkdownText({ content }: { content: string }) {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}

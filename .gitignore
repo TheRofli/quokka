@@ -5,6 +5,7 @@ Thumbs.db
 .continue/
 .kilo/
 .publish/
+exports/
 __pycache__/
 *.pyc
 .pytest_cache/

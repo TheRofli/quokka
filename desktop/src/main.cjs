@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, shell } = require("electron");
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -293,84 +293,18 @@ function createWindow() {
     logDesktop(`Failed to load ${validatedUrl}: ${errorCode} ${errorDescription}`);
   });
 
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      logDesktop(`Renderer console ${level} at ${sourceId}:${line}: ${message}`);
+    }
+  });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    logDesktop("Renderer finished loading.");
+  });
+
   mainWindow.loadURL(appUrl());
 }
-
-ipcMain.handle("quokka:open-folder", async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: "Choose Agent Lab workspace",
-    properties: ["openDirectory"],
-  });
-  if (result.canceled || !result.filePaths.length) {
-    return null;
-  }
-  return result.filePaths[0];
-});
-
-function ensureFolderPath(folderPath) {
-  if (!folderPath || typeof folderPath !== "string") {
-    throw new Error("No workspace folder was selected.");
-  }
-  const resolved = path.resolve(folderPath);
-  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    throw new Error("Workspace folder does not exist.");
-  }
-  return resolved;
-}
-
-function spawnDetached(command, args, options = {}) {
-  try {
-    const child = childProcess.spawn(command, args, {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: false,
-      ...options,
-    });
-    child.on("error", (error) => logDesktop(`Failed to launch ${command}: ${error.message}`));
-    child.unref();
-    return { ok: true, message: `Opened with ${command}` };
-  } catch (error) {
-    logDesktop(`Failed to launch ${command}: ${error.message}`);
-    return { ok: false, message: error.message };
-  }
-}
-
-ipcMain.handle("quokka:open-workspace", async (_event, folderPath, target) => {
-  try {
-    const resolved = ensureFolderPath(folderPath);
-    const gitBash = "C:\\Program Files\\Git\\git-bash.exe";
-    const launchers = {
-      vscode: () => spawnDetached("code", [resolved]),
-      visualstudio: () => spawnDetached("devenv", [resolved]),
-      cursor: () => spawnDetached("cursor", [resolved]),
-      explorer: async () => {
-        const result = await shell.openPath(resolved);
-        return { ok: !result, message: result || "Opened in File Explorer" };
-      },
-      gitbash: () => (fs.existsSync(gitBash) ? spawnDetached(gitBash, ["--cd=" + resolved]) : spawnDetached("git-bash", ["--cd=" + resolved])),
-      androidstudio: () => spawnDetached("studio64", [resolved]),
-      idea: () => spawnDetached("idea64", [resolved]),
-      pycharm: () => spawnDetached("pycharm64", [resolved]),
-    };
-    const launcher = launchers[target] ?? launchers.explorer;
-    return await launcher();
-  } catch (error) {
-    return { ok: false, message: error.message };
-  }
-});
-
-ipcMain.handle("quokka:open-terminal", async (_event, folderPath) => {
-  try {
-    const resolved = ensureFolderPath(folderPath);
-    const result = spawnDetached("wt.exe", ["-d", resolved]);
-    if (result.ok) {
-      return result;
-    }
-    return spawnDetached("powershell.exe", ["-NoExit", "-Command", "Set-Location -LiteralPath " + JSON.stringify(resolved)]);
-  } catch (error) {
-    return { ok: false, message: error.message };
-  }
-});
 
 function showWindow() {
   if (!mainWindow) {

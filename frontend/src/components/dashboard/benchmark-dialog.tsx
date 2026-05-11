@@ -384,23 +384,23 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
   const totalTokens = visibleResult?.stages.reduce((sum, stage) => sum + (stage.generated_tokens_estimate ?? 0), 0) ?? 0;
   const bestCandidate = visibleResult?.leaderboard?.[0] ?? null;
   const shellClass = embedded
-    ? "min-h-0 w-full flex-1 overflow-hidden bg-panel/45 text-milk"
-    : "fixed inset-0 z-50 bg-shell text-milk";
+    ? "min-h-0 w-full flex-1 overflow-hidden text-milk"
+    : "fixed inset-0 z-50 bg-shell p-4 text-milk";
   const disabled = isRunning;
   const inputClass =
-    "h-11 w-full border border-line/70 bg-panel-2/45 px-3 font-mono text-sm text-milk outline-none transition focus:border-accent/70 disabled:cursor-not-allowed disabled:opacity-55";
+    "quokka-input h-11 w-full px-3 font-mono text-sm outline-none transition disabled:cursor-not-allowed disabled:opacity-55";
   const compactInputClass =
-    "h-10 border border-line/70 bg-panel-2/45 px-3 font-mono text-sm text-milk outline-none focus:border-accent/70 disabled:cursor-not-allowed disabled:opacity-55";
+    "quokka-input h-10 px-3 font-mono text-sm outline-none disabled:cursor-not-allowed disabled:opacity-55";
   const comparePreview = compareRows(history);
 
   return (
     <div className={shellClass}>
-      <div className="flex h-full min-h-0 flex-col bg-panel/45">
-        <header className="flex h-[72px] shrink-0 items-center justify-between border-b border-line/70 px-6">
+      <div className="flex h-full min-h-0 flex-col bg-transparent">
+        <header className="quokka-panel flex h-[66px] shrink-0 items-center justify-between rounded-[var(--radius-control)] px-5">
           <div className="flex items-center gap-3">
-            <Terminal className="h-5 w-5 text-accent" />
+            <Terminal className="h-5 w-5 text-live" />
             <div>
-              <h2 className="font-mono text-[24px] font-bold uppercase tracking-[0.12em] text-milk">LLM Tests Terminal</h2>
+              <h2 className="font-mono text-[20px] font-bold uppercase tracking-[0.12em] text-milk">LLM Tests Terminal</h2>
               <p className="font-mono text-xs text-milk/45">optimization lab / polling mode / artifacts written on finish</p>
             </div>
           </div>
@@ -411,8 +411,8 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
           ) : null}
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[330px_minmax(0,1fr)_260px] border-b border-line/70">
-          <aside className="flex min-h-0 flex-col border-r border-line/70 bg-shell/55">
+        <div className="mt-3 grid min-h-0 flex-1 grid-cols-[330px_minmax(0,1fr)_260px] gap-3 overflow-hidden">
+          <aside className="quokka-surface flex min-h-0 flex-col overflow-hidden rounded-[var(--radius-control)]">
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
               <div className="space-y-6">
                 <ControlLabel label="model">
@@ -504,7 +504,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                 </button>
 
                 {advancedOpen ? (
-                  <div className="space-y-3 border border-line/70 bg-panel/55 p-3 font-mono text-xs">
+                  <div className="quokka-panel space-y-3 rounded-[var(--radius-control)] p-3 font-mono text-xs">
                     <label className="block">
                       <span className="mb-1 block text-milk/48">ctx range</span>
                       <input className={inputClass} value={ctxValues} disabled={disabled} onChange={(event) => setCtxValues(event.target.value)} />
@@ -532,7 +532,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                   </div>
                 ) : null}
 
-                <label className="flex items-start gap-3 border border-line/70 bg-panel/55 p-3 font-mono text-sm text-milk/68">
+                <label className="quokka-panel flex items-start gap-3 rounded-[var(--radius-control)] p-3 font-mono text-sm text-milk/68">
                   <input
                     type="checkbox"
                     className="mt-1 h-4 w-4 border-line bg-shell"
@@ -550,21 +550,21 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
               </div>
             </div>
 
-            <div className="border-t border-line/70 p-4">
+            <div className="border-t border-line/60 p-4">
               {isRunning ? (
-                <Button className="h-14 w-full justify-center rounded-none font-mono" variant="danger" onClick={() => void cancel()}>
+                <Button className="h-14 w-full justify-center rounded-[var(--radius-control)] font-mono" variant="danger" onClick={() => void cancel()}>
                   <Square className="h-4 w-4" />
                   &gt; stop
                 </Button>
               ) : (
-                <Button className="h-14 w-full justify-center rounded-none font-mono" variant="primary" disabled={!selectedModel} onClick={() => void run()}>
+                <Button className="h-14 w-full justify-center rounded-[var(--radius-control)] font-mono" variant="primary" disabled={!selectedModel} onClick={() => void run()}>
                   <Play className="h-4 w-4" />
                   &gt; run tests
                 </Button>
               )}
             </div>
 
-            <div className="max-h-56 overflow-y-auto border-t border-line/70 px-4 py-3">
+            <div className="max-h-56 overflow-y-auto border-t border-line/60 px-4 py-3">
               <div className="mb-2 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-accent/78">
                 <History className="h-3.5 w-3.5" />
                 history / compare
@@ -591,12 +591,12 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
             </div>
           </aside>
 
-          <main className="grid min-h-0 grid-rows-[minmax(0,1fr)_230px] bg-panel/35">
-            <section className="min-h-0 border-b border-line/70">
-              <div className="flex h-12 items-center justify-between border-b border-line/70 px-5 font-mono">
+          <main className="quokka-terminal grid min-h-0 grid-rows-[minmax(0,1fr)_230px] overflow-hidden rounded-[var(--radius-control)] border border-line/60">
+            <section className="min-h-0 border-b border-line/60">
+              <div className="flex h-12 items-center justify-between border-b border-line/60 px-5 font-mono">
                 <div className="flex items-center gap-3 text-sm">
-                  <Activity className={cn("h-4 w-4", isRunning ? "animate-pulse text-accent" : "text-milk/45")} />
-                  <span className="uppercase tracking-[0.16em] text-accent/78">live terminal</span>
+                  <Activity className={cn("h-4 w-4", isRunning ? "animate-pulse text-live" : "text-milk/45")} />
+                  <span className="uppercase tracking-[0.16em] text-live/80">live terminal</span>
                   <span className="text-milk/45">{statusLabel(visibleResult)}</span>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-milk/45">
@@ -612,11 +612,11 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                     className={cn(
                       "whitespace-pre-wrap",
                       line.startsWith("[PERF]") && "text-success",
-                      line.startsWith("[OK") && "text-accent",
+                      line.startsWith("[OK") && "text-live",
                       line.startsWith("[WAIT") && "text-milk/50",
                       line.startsWith("[WARN") && "text-warning",
                       line.startsWith("[ERR") && "text-danger",
-                      line.startsWith("[BEST]") && "text-accent",
+                      line.startsWith("[BEST]") && "text-live",
                       line.startsWith("[STEP") && "mt-2 font-bold text-milk",
                       line.startsWith("  ") && "pl-5 text-milk/68",
                       line.startsWith(">") && "text-milk"
@@ -627,7 +627,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                 ))}
 
                 {workflowMode === "compare" && comparePreview.length ? (
-                  <div className="mt-6 border-l-2 border-accent/70 pl-4 text-accent">
+                  <div className="mt-6 border-l-2 border-live/70 pl-4 text-live">
                     {comparePreview.map((line) => (
                       <div key={line}>{line}</div>
                     ))}
@@ -637,7 +637,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                 {visibleResult?.candidate_groups?.length ? (
                   <div className="mt-6 grid gap-3">
                     {visibleResult.candidate_groups.map((group) => (
-                      <div key={group.id} className="border border-line/65 bg-shell/35 p-3">
+                      <div key={group.id} className="rounded-[var(--radius-control)] border border-line/60 bg-surface/58 p-3">
                         <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.16em] text-accent/78">
                           <span>{group.title}</span>
                           <span>{group.selected ? `${group.selected} <- selected` : "scanning"}</span>
@@ -661,8 +661,8 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
               </div>
             </section>
 
-            <section className="min-h-0 bg-shell/45">
-              <div className="flex h-10 items-center justify-between border-b border-line/70 px-5 font-mono text-xs uppercase tracking-[0.16em] text-accent/78">
+            <section className="min-h-0 bg-surface/54">
+              <div className="flex h-10 items-center justify-between border-b border-line/60 px-5 font-mono text-xs uppercase tracking-[0.16em] text-accent/78">
                 <span>run log</span>
                 <span>{runLogLines.length} lines</span>
               </div>
@@ -674,7 +674,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                       "whitespace-pre-wrap",
                       line.startsWith("[WARN") && "text-warning",
                       line.startsWith("[ERROR") && "text-danger",
-                      line.startsWith("[INFO") && "text-accent"
+                      line.startsWith("[INFO") && "text-live"
                     )}
                   >
                     {line}
@@ -685,7 +685,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
             </section>
           </main>
 
-          <aside className="min-h-0 overflow-y-auto border-l border-line/70 bg-shell/55 px-5 py-5">
+          <aside className="quokka-surface min-h-0 overflow-y-auto rounded-[var(--radius-control)] px-5 py-5">
             <div className="mb-4 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.16em] text-accent/78">
               <Gauge className="h-4 w-4" />
               metrics rail
@@ -709,12 +709,12 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
             </div>
 
             <div className="mt-5 space-y-3">
-              <MetricBar label="GPU" value={metricValue(liveMetrics, "gpu_usage_percent")} color="bg-accent/75" />
+              <MetricBar label="GPU" value={metricValue(liveMetrics, "gpu_usage_percent")} color="bg-live/75" />
               <MetricBar label="CPU" value={metricValue(liveMetrics, "cpu_usage_percent")} color="bg-warning/75" />
               <MetricBar label="RAM" value={metricValue(liveMetrics, "ram_usage_percent")} color="bg-success/75" />
             </div>
 
-            <div className="mt-6 border border-line/65 bg-panel/55 p-3 font-mono text-xs">
+            <div className="quokka-panel mt-6 rounded-[var(--radius-control)] p-3 font-mono text-xs">
               <div className="mb-2 flex items-center gap-2 uppercase tracking-[0.16em] text-accent/78">
                 <BarChart3 className="h-3.5 w-3.5" />
                 leaderboard
@@ -731,7 +731,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
               </div>
             </div>
 
-            <div className="mt-6 border border-line/65 bg-panel/55 p-3 font-mono text-xs">
+            <div className="quokka-panel mt-6 rounded-[var(--radius-control)] p-3 font-mono text-xs">
               <div className="mb-2 flex items-center gap-2 uppercase tracking-[0.16em] text-accent/78">
                 <Zap className="h-3.5 w-3.5" />
                 artifacts
@@ -749,7 +749,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
 
             <div className="mt-4 grid gap-2">
               <Button
-                className="rounded-none font-mono"
+                className="rounded-[var(--radius-control)] font-mono"
                 variant="secondary"
                 size="sm"
                 disabled={!visibleResult}
@@ -759,7 +759,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                 Copy JSON
               </Button>
               <Button
-                className="rounded-none font-mono"
+                className="rounded-[var(--radius-control)] font-mono"
                 variant="secondary"
                 size="sm"
                 disabled={!visibleResult}
@@ -769,7 +769,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                 JSON
               </Button>
               <Button
-                className="rounded-none font-mono"
+                className="rounded-[var(--radius-control)] font-mono"
                 variant="secondary"
                 size="sm"
                 disabled={!visibleResult}
@@ -779,7 +779,7 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
                 CSV
               </Button>
               <Button
-                className="rounded-none font-mono"
+                className="rounded-[var(--radius-control)] font-mono"
                 variant="secondary"
                 size="sm"
                 disabled={!visibleResult?.final_recommended_launch}

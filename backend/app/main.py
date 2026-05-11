@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import agent, chat, config, models, profiles, system
+from app.api.routes import chat, config, lab, models, profiles, system
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.services.config_service import ConfigService
@@ -65,6 +65,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
+        allow_origin_regex=settings.cors_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -75,7 +76,7 @@ def create_app() -> FastAPI:
     app.include_router(profiles.router, prefix=settings.api_prefix)
     app.include_router(config.router, prefix=settings.api_prefix)
     app.include_router(chat.router, prefix=settings.api_prefix)
-    app.include_router(agent.router, prefix=settings.api_prefix)
+    app.include_router(lab.router, prefix=settings.api_prefix)
 
     frontend_dist = settings.frontend_dist
     if frontend_dist.exists():
@@ -83,12 +84,23 @@ def create_app() -> FastAPI:
         if assets_dir.exists():
             app.mount("/assets", StaticFiles(directory=assets_dir), name="frontend-assets")
 
+        @app.middleware("http")
+        async def disable_frontend_cache(request, call_next):
+            response: Response = await call_next(request)
+            if request.url.path == "/" or request.url.path.startswith("/assets/"):
+                response.headers["Cache-Control"] = "no-store, max-age=0"
+                response.headers["Pragma"] = "no-cache"
+            return response
+
         @app.get("/", include_in_schema=False)
         def serve_index():
             return FileResponse(frontend_dist / "index.html")
 
         @app.get("/{full_path:path}", include_in_schema=False)
         def spa_fallback(full_path: str):
+            if full_path.startswith(f"{settings.api_prefix.strip('/')}/"):
+                raise HTTPException(status_code=404, detail="API route not found")
+
             requested = frontend_dist / full_path
             if requested.exists() and requested.is_file():
                 return FileResponse(requested)

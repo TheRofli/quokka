@@ -107,8 +107,18 @@ class ModelService:
         existing_paths = self._configured_model_paths()
         discovered: list[DiscoveredModelArtifact] = []
         seen: set[str] = set()
+        query_text = (query or "").strip().strip("\"'")
+        is_windows_path_query = bool(re.match(r"^[a-zA-Z]:[\\/]", query_text) or query_text.startswith("\\\\"))
+        is_wsl_path_query = bool(query_text.startswith("/") or query_text.startswith("~/"))
 
-        for artifact in [*self._discover_wsl_models("Ubuntu", limit), *self._discover_windows_models(limit, query)]:
+        if is_windows_path_query:
+            candidates = self._discover_windows_models(limit, query)
+        elif is_wsl_path_query:
+            candidates = self._discover_wsl_models("Ubuntu", limit)
+        else:
+            candidates = [*self._discover_wsl_models("Ubuntu", limit), *self._discover_windows_models(limit, query)]
+
+        for artifact in candidates:
             key = artifact.launch_path.lower()
             if key in seen or key in existing_paths or artifact.file_name.lower() in existing_paths:
                 continue

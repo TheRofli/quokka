@@ -7,11 +7,13 @@ const config: Config = {
     extend: {
       colors: {
         shell: "rgb(var(--color-shell) / <alpha-value>)",
+        surface: "rgb(var(--color-surface) / <alpha-value>)",
         panel: "rgb(var(--color-panel) / <alpha-value>)",
         "panel-2": "rgb(var(--color-panel-2) / <alpha-value>)",
         milk: "rgb(var(--color-milk) / <alpha-value>)",
         accent: "rgb(var(--color-accent) / <alpha-value>)",
         "accent-soft": "rgb(var(--color-accent-soft) / <alpha-value>)",
+        live: "rgb(var(--color-live) / <alpha-value>)",
         line: "rgb(var(--color-line) / <alpha-value>)",
         success: "rgb(var(--color-success) / <alpha-value>)",
         warning: "rgb(var(--color-warning) / <alpha-value>)",

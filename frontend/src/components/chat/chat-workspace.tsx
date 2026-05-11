@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
   Bot,
   BrainCircuit,
   ChevronDown,
-  Cpu,
-  Database,
   FileText,
-  Gauge,
   Image,
   MessageSquarePlus,
   Paperclip,
@@ -29,7 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatTimestamp } from "@/lib/utils";
 import type { ChatAttachment, ChatCompletionResponse, ChatMessagePayload, ModelView } from "@/types/api";
-import { EnhancedMessageBubble } from "./enhanced-message-bubble";
+import { EnhancedMessageBubble, MarkdownText } from "./enhanced-message-bubble";
 
 type ChatRole = "user" | "assistant";
 type ChatMode = "chat";
@@ -140,13 +136,6 @@ function formatMemoryMb(value?: number | null) {
     return `${(value / 1024).toFixed(value >= 10 * 1024 ? 1 : 2)} GB`;
   }
   return `${Math.round(value)} MB`;
-}
-
-function formatPercent(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "--";
-  }
-  return `${Math.round(value)}%`;
 }
 
 function statusTone(status?: string | null) {
@@ -283,7 +272,11 @@ function LegacyLiveAssistantBubble({
             </div>
           ) : null}
         </div>
-        {answer ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-milk/78">{answer}</p> : null}
+        {answer ? (
+          <div className="mt-3">
+            <MarkdownText content={answer} />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -324,7 +317,7 @@ function LiveAssistantBubble({
           </div>
         ) : null}
         <div className="border-l border-accent/35 pl-4">
-          {answer ? <p className="whitespace-pre-wrap text-sm leading-6 text-milk/82">{answer}</p> : null}
+          {answer ? <MarkdownText content={answer} /> : null}
         </div>
       </div>
     </div>
@@ -406,9 +399,6 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
   const resourceUsage = selectedModel?.runtime.resource_usage;
   const vramDisplay = formatMemoryMb(resourceUsage?.vram_mb);
   const ramDisplay = formatMemoryMb(resourceUsage?.ram_mb);
-  const cpuDisplay = formatPercent(resourceUsage?.cpu_percent);
-  const gpuDisplay = formatPercent(resourceUsage?.gpu_percent);
-  const runtimeLatency = selectedModel?.runtime.health_latency_ms;
   const selectedProfile = selectedModel?.active_profile;
   const modelEndpoint = selectedModel?.endpoint ?? "No endpoint";
   const groupedSessions = useMemo(() => {
@@ -684,8 +674,8 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
   };
 
   return (
-    <main className="flex h-full min-h-0 flex-1 overflow-hidden bg-shell text-milk">
-      <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_34%,rgb(var(--color-accent)/0.09),transparent_30%),linear-gradient(180deg,rgb(var(--color-shell)),rgb(var(--color-panel)/0.65))]">
+    <main className="flex h-full min-h-0 flex-1 overflow-hidden bg-transparent text-milk">
+      <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_34%,rgb(var(--color-accent)/0.075),transparent_30%),linear-gradient(180deg,rgb(var(--color-shell)/0.78),rgb(var(--color-surface)/0.72))]">
         {!chatSidebarOpen ? (
           <button
             type="button"
@@ -696,10 +686,10 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
             <PanelRightOpen className="h-4 w-4" />
           </button>
         ) : null}
-        <header className="flex min-h-[68px] items-center justify-between gap-4 border-b border-line/45 px-5 py-3">
+        <header className="flex min-h-[58px] items-center justify-between gap-4 border-b border-line/38 px-5 py-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-accent/18 text-accent">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-accent/14 text-accent">
                 <Sparkles className="h-4 w-4" />
               </span>
               <div className="min-w-0">
@@ -710,23 +700,12 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
           </div>
 
           <div className="hidden items-center gap-2 lg:flex">
-            {[
-              { label: "tok/s", value: formatCompactNumber(liveTokensPerSecond, 1), icon: Gauge },
-              { label: "ctx", value: `${contextPercent.toFixed(1)}%`, icon: Database },
-              { label: "gpu", value: gpuDisplay, icon: Activity },
-              { label: "cpu", value: cpuDisplay, icon: Cpu },
-            ].map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="flex min-w-[92px] items-center gap-2 rounded-full border border-line/55 bg-panel/54 px-3 py-2">
-                  <Icon className="h-3.5 w-3.5 text-accent" />
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.16em] text-milk/36">{item.label}</p>
-                    <p className="text-sm font-semibold text-milk">{item.value}</p>
-                  </div>
-                </div>
-              );
-            })}
+            <div className="quokka-pill px-3 py-2 text-xs text-milk/52">
+              {activeSession?.messages.length ?? 0} messages / {attachments.length} files
+            </div>
+            <div className="quokka-pill px-3 py-2 text-xs text-milk/52">
+              ctx {contextPercent.toFixed(1)}%
+            </div>
             {!chatSidebarOpen ? (
               <Button
                 type="button"
@@ -777,26 +756,21 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                   </button>
                 </div>
                 <p className="mt-5 max-w-2xl text-sm leading-6 text-milk/54">
-                  Chat with a local LLM, watch throughput, context pressure, VRAM and sampling settings without leaving the prompt.
+                  Calm local chat for prompts, logs, configs, and model behavior checks. The global Quokka bar above keeps live tok/s,
+                  context, GPU and VRAM visible without turning the conversation into a dashboard.
                 </p>
-                <div className="mt-7 grid w-full max-w-3xl grid-cols-2 gap-3 md:grid-cols-4">
-                  <div className="rounded-3xl border border-line/55 bg-panel/45 p-3">
-                    <p className="text-xs text-milk/42">Current speed</p>
-                    <p className="mt-1 text-lg font-semibold text-milk">{formatCompactNumber(liveTokensPerSecond, 1)} tok/s</p>
+                <div className="mt-7 grid w-full max-w-3xl gap-3 text-left md:grid-cols-3">
+                  <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
+                    <p className="text-sm font-semibold text-milk">Ask the model</p>
+                    <p className="mt-2 text-sm leading-5 text-milk/50">Use instant mode for short answers or thinking mode for deeper reasoning.</p>
                   </div>
-                  <div className="rounded-3xl border border-line/55 bg-panel/45 p-3">
-                    <p className="text-xs text-milk/42">Context left</p>
-                    <p className="mt-1 text-lg font-semibold text-milk">{formatCompactNumber(contextLeft)}</p>
+                  <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
+                    <p className="text-sm font-semibold text-milk">Attach context</p>
+                    <p className="mt-2 text-sm leading-5 text-milk/50">Send config snippets, logs, docs, or images to your local endpoint.</p>
                   </div>
-                  <div className="rounded-3xl border border-line/55 bg-panel/45 p-3">
-                    <p className="text-xs text-milk/42">VRAM</p>
-                    <p className="mt-1 text-lg font-semibold text-milk">{vramDisplay}</p>
-                  </div>
-                  <div className="rounded-3xl border border-line/55 bg-panel/45 p-3">
-                    <p className="text-xs text-milk/42">Latency</p>
-                    <p className="mt-1 text-lg font-semibold text-milk">
-                      {runtimeLatency ? `${Math.round(runtimeLatency)} ms` : "--"}
-                    </p>
+                  <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
+                    <p className="text-sm font-semibold text-milk">Tune later</p>
+                    <p className="mt-2 text-sm leading-5 text-milk/50">Move to LLM Tests when you need ctx, batch, KV cache, and throughput sweeps.</p>
                   </div>
                 </div>
               </div>
