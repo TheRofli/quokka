@@ -5,6 +5,7 @@ import { ControlPanel } from "@/components/control/control-panel";
 import { TopStatusBar } from "@/components/app/top-status-bar";
 import { AddModelDialog } from "@/components/dashboard/add-model-dialog";
 import type { MetricId } from "@/components/dashboard/metric-detail-dialog";
+import { FirstRunWizard } from "@/components/onboarding/first-run-wizard";
 import { RuntimeErrorBoundary } from "@/components/runtime-error-boundary";
 import { useQuokkaDashboard } from "@/hooks/use-quokka-dashboard";
 import { formatTimestamp } from "@/lib/utils";
@@ -74,6 +75,7 @@ function App() {
   const [chatMounted, setChatMounted] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => window.localStorage.getItem("quokka.theme") ?? "quokka");
+  const [firstRunDismissed, setFirstRunDismissed] = useState(() => window.localStorage.getItem("quokka.firstRun.dismissed") === "1");
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId | null>(null);
   const {
     metrics,
@@ -111,6 +113,11 @@ function App() {
       setChatMounted(true);
     }
   }, [mode]);
+
+  const dismissFirstRun = () => {
+    setFirstRunDismissed(true);
+    window.localStorage.setItem("quokka.firstRun.dismissed", "1");
+  };
 
   return (
     <div className="h-screen overflow-hidden bg-shell text-milk">
@@ -227,6 +234,14 @@ function App() {
           </div>
         ) : null}
 
+        {mode === "control" && !models.length && !firstRunDismissed ? (
+          <FirstRunWizard
+            onAddModel={() => setAddModelOpen(true)}
+            onOpenTests={() => setMode("tests")}
+            onDismiss={dismissFirstRun}
+          />
+        ) : null}
+
         {chatMounted ? (
           <div className={mode === "chat" ? "contents" : "hidden"}>
             <Suspense fallback={<LazyPanelFallback label="Loading Chat..." />}>
@@ -272,6 +287,27 @@ function App() {
                   </button>
                 ))}
               </div>
+
+              <div className="mt-8 rounded-lg border border-line bg-surface/55 px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-accent">Install & Update</p>
+                <h2 className="mt-2 text-xl font-semibold text-milk">Friend-friendly terminal flow</h2>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
+                  Install once, run Quokka with `quokka`, update with `quokka-update`, and let Quokka Lab discover running models through `/api/lab/models`.
+                </p>
+                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  {[
+                    { label: "Install", command: "git clone https://github.com/TheRofli/Quokka.git && cd Quokka && .\\install-quokka.ps1" },
+                    { label: "Open", command: "quokka" },
+                    { label: "Update", command: "quokka-update" },
+                  ].map((item) => (
+                    <div key={item.label} className="rounded-lg border border-line/70 bg-shell/40 px-3 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/38">{item.label}</p>
+                      <code className="mt-2 block break-all font-mono text-sm text-milk/70">{item.command}</code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="mt-8">
                 <p className="text-xs uppercase tracking-[0.24em] text-accent">Control Surface</p>
                 <h2 className="mt-2 text-xl font-semibold text-milk">Upcoming Settings</h2>

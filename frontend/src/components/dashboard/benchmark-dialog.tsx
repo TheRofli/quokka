@@ -258,6 +258,8 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
   const [threadValues, setThreadValues] = useState("8 12 16");
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [applyMessage, setApplyMessage] = useState<string | null>(null);
+  const [applySaving, setApplySaving] = useState(false);
   const [result, setResult] = useState<BenchmarkRunResponse | null>(null);
   const [history, setHistory] = useState<BenchmarkRunResponse[]>([]);
   const terminalRef = useRef<HTMLDivElement | null>(null);
@@ -370,6 +372,27 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
     const next = await api.cancelBenchmarkRun(selectedModel.id, result.id);
     setResult(next);
     setIsRunning(false);
+  };
+
+  const saveRecommendedProfile = async () => {
+    if (!selectedModel || !visibleResult) {
+      return;
+    }
+    setApplySaving(true);
+    setApplyMessage(null);
+    try {
+      const profile = await api.applyBenchmarkProfile(selectedModel.id, {
+        name: `Benchmark ${visibleResult.suite ?? visibleResult.mode} ${new Date().toLocaleDateString()}`,
+        launch_params: visibleResult.launch_params ?? {},
+        final_recommended_launch: visibleResult.final_recommended_launch ?? null,
+        activate: true,
+      });
+      setApplyMessage(`Saved and activated profile: ${profile.name}`);
+    } catch (nextError) {
+      setApplyMessage(nextError instanceof Error ? nextError.message : "Could not save benchmark profile");
+    } finally {
+      setApplySaving(false);
+    }
   };
 
   if (!open) {
@@ -747,7 +770,23 @@ export function BenchmarkDialog({ open, embedded = false, models, onClose }: Ben
               </div>
             </div>
 
+            {applyMessage ? (
+              <div className="mt-4 rounded-[var(--radius-control)] border border-accent/35 bg-accent/10 px-3 py-2 font-mono text-xs text-milk/70">
+                {applyMessage}
+              </div>
+            ) : null}
+
             <div className="mt-4 grid gap-2">
+              <Button
+                className="rounded-[var(--radius-control)] font-mono"
+                variant="primary"
+                size="sm"
+                disabled={!visibleResult || applySaving || !Object.keys(visibleResult.launch_params ?? {}).length}
+                onClick={() => void saveRecommendedProfile()}
+              >
+                <Zap className="h-4 w-4" />
+                {applySaving ? "Saving" : "Save Profile"}
+              </Button>
               <Button
                 className="rounded-[var(--radius-control)] font-mono"
                 variant="secondary"

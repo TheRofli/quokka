@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.dependencies import get_model_service
 from app.schemas.api import (
     ApiMessage,
+    ApplyBenchmarkProfileRequest,
     BenchmarkRunRequest,
     BenchmarkRunResponse,
     BenchmarkRunStatus,
@@ -12,10 +13,11 @@ from app.schemas.api import (
     DiscoveredModelArtifact,
     HealthCheckResponse,
     LogResponse,
+    ModelDoctorResponse,
     ModelView,
     RenameModelRequest,
 )
-from app.schemas.config import ModelSettings
+from app.schemas.config import ModelSettings, ProfileConfig
 from app.services.model_service import ModelService
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -105,6 +107,20 @@ def clear_logs(model_id: str, model_service: ModelService = Depends(get_model_se
 @router.get("/{model_id}/health", response_model=HealthCheckResponse)
 async def get_model_health(model_id: str, model_service: ModelService = Depends(get_model_service)) -> HealthCheckResponse:
     return await model_service.check_health(model_id)
+
+
+@router.get("/{model_id}/doctor", response_model=ModelDoctorResponse)
+def get_model_doctor(model_id: str, model_service: ModelService = Depends(get_model_service)) -> ModelDoctorResponse:
+    return model_service.diagnose_model(model_id)
+
+
+@router.post("/{model_id}/apply-benchmark-profile", response_model=ProfileConfig)
+def apply_benchmark_profile(
+    model_id: str,
+    payload: ApplyBenchmarkProfileRequest,
+    model_service: ModelService = Depends(get_model_service),
+) -> ProfileConfig:
+    return model_service.apply_benchmark_profile(model_id, payload)
 
 
 @router.post("/{model_id}/benchmark", response_model=BenchmarkRunResponse)

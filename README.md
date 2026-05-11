@@ -68,6 +68,15 @@ GET http://127.0.0.1:8000/api/lab/models?ready_only=false
 
 Each item includes the Quokka model id, display name, provider, endpoint, runtime status, `api_format`, `model_name`, and `chat_url`. Quokka Lab should use `chat_url` plus `model_name` to send local inference requests.
 
+## Product Helpers
+
+Quokka includes a few friend-friendly helpers on top of raw model control:
+
+- First Run Wizard: appears when no models are configured and points users to Add Model, LLM Tests, and the Quokka Lab bridge.
+- Model Health Doctor: `GET /api/models/{model_id}/doctor` checks the model path, runtime type, port, HTTP health, and recent runtime error.
+- Benchmark profile apply: `POST /api/models/{model_id}/apply-benchmark-profile` saves benchmark launch params as a new profile and can activate it.
+- Chat profiles: Balanced, Fast Answer, Coding, Deep Reasoning, and Strict JSON adjust sampling and system instructions without manual slider work.
+
 ## Stack
 
 Backend:
@@ -162,6 +171,8 @@ The backend exposes:
 - `POST /api/models/{model_id}/restart`
 - `GET /api/models/{model_id}/logs`
 - `GET /api/models/{model_id}/health`
+- `GET /api/models/{model_id}/doctor`
+- `POST /api/models/{model_id}/apply-benchmark-profile`
 - `GET /api/lab/models`
 - `GET /api/models/{model_id}/profiles`
 - `POST /api/models/{model_id}/profiles`

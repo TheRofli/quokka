@@ -30,6 +30,7 @@ import { EnhancedMessageBubble, MarkdownText } from "./enhanced-message-bubble";
 type ChatRole = "user" | "assistant";
 type ChatMode = "chat";
 type ThinkingMode = "instant" | "thinking";
+type ChatProfileId = "balanced" | "fast" | "coding" | "deep" | "strict_json";
 
 interface ChatMessage {
   id: string;
@@ -356,6 +357,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
   const [temperature, setTemperature] = useState(0.7);
   const [topP, setTopP] = useState(0.9);
   const [thinkingMode, setThinkingMode] = useState<ThinkingMode>("instant");
+  const [chatProfileId, setChatProfileId] = useState<ChatProfileId>("balanced");
   const [chatSidebarOpen, setChatSidebarOpen] = useState(() => window.localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "0");
   const [error, setError] = useState<string | null>(null);
   const [promptNotice, setPromptNotice] = useState<string | null>(null);
@@ -400,6 +402,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
   const vramDisplay = formatMemoryMb(resourceUsage?.vram_mb);
   const ramDisplay = formatMemoryMb(resourceUsage?.ram_mb);
   const selectedProfile = selectedModel?.active_profile;
+  const chatProfile = chatProfiles.find((profile) => profile.id === chatProfileId) ?? chatProfiles[0];
   const modelEndpoint = selectedModel?.endpoint ?? "No endpoint";
   const groupedSessions = useMemo(() => {
     const groups: Array<{ label: string; sessions: ChatSession[] }> = [];
@@ -513,6 +516,15 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
     }
   };
 
+  const applyChatProfile = (profileId: ChatProfileId) => {
+    const profile = chatProfiles.find((item) => item.id === profileId) ?? chatProfiles[0];
+    setChatProfileId(profile.id);
+    setTemperature(profile.temperature);
+    setTopP(profile.topP);
+    setThinkingMode(profile.thinkingMode);
+    setPromptNotice(`${profile.label} profile applied.`);
+  };
+
   const send = async () => {
     if (!activeSession || !selectedModel || (!draft.trim() && !attachments.length)) {
       return;
@@ -549,8 +561,8 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
         role: "system",
         content:
           thinkingMode === "thinking"
-            ? "Use careful reasoning before answering. Keep any final answer clear and practical."
-            : "Answer directly and do not include chain-of-thought or <think> blocks in the final response.",
+            ? `${chatProfile.system} Use careful reasoning before answering. Keep any final answer clear and practical.`
+            : `${chatProfile.system} Answer directly and do not include chain-of-thought or <think> blocks in the final response.`,
       };
       const payloadMessages: ChatMessagePayload[] = [
         modeMessage,
@@ -577,7 +589,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
         model_id: selectedModel.id,
         messages: payloadMessages,
         attachments: userMessage.attachments ?? [],
-        max_tokens: maxTokens,
+        max_tokens: Math.max(128, Math.round(maxTokens * chatProfile.maxTokenScale)),
         temperature: temperature,
         top_p: topP,
         timeout_seconds: 300,
@@ -1040,6 +1052,22 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-milk/38">Prompt controls</p>
                 <ContextRing usedTokens={usedTokens} contextSize={contextSize} />
               </div>
+
+              <label className="mt-3 block">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.16em] text-milk/38">Chat profile</span>
+                <select
+                  className="h-9 w-full rounded-full border border-line/60 bg-panel px-3 text-xs text-milk outline-none focus:border-accent/70"
+                  value={chatProfileId}
+                  onChange={(event) => applyChatProfile(event.target.value as ChatProfileId)}
+                >
+                  {chatProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id} className="bg-panel">
+                      {profile.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="mt-3 inline-flex w-full rounded-full border border-line/60 bg-panel/62 p-1">
                 <button type="button" onClick={() => setThinkingMode("instant")} className={cn("flex-1 rounded-full px-3 py-2 text-xs font-semibold transition", thinkingMode === "instant" ? "bg-accent/18 text-accent" : "text-milk/52 hover:text-milk")}>
                   No thinking
@@ -1094,3 +1122,59 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
     </main>
   );
 }
+
+const chatProfiles: Array<{
+  id: ChatProfileId;
+  label: string;
+  temperature: number;
+  topP: number;
+  thinkingMode: ThinkingMode;
+  maxTokenScale: number;
+  system: string;
+}> = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    temperature: 0.7,
+    topP: 0.9,
+    thinkingMode: "instant",
+    maxTokenScale: 1,
+    system: "Be helpful, concise, and practical. Match the user's language.",
+  },
+  {
+    id: "fast",
+    label: "Fast answer",
+    temperature: 0.45,
+    topP: 0.86,
+    thinkingMode: "instant",
+    maxTokenScale: 0.55,
+    system: "Answer quickly and directly. Prefer short practical responses.",
+  },
+  {
+    id: "coding",
+    label: "Coding",
+    temperature: 0.18,
+    topP: 0.88,
+    thinkingMode: "thinking",
+    maxTokenScale: 1.2,
+    system: "Focus on code correctness. Explain assumptions, edge cases, commands, and verification steps.",
+  },
+  {
+    id: "deep",
+    label: "Deep reasoning",
+    temperature: 0.35,
+    topP: 0.92,
+    thinkingMode: "thinking",
+    maxTokenScale: 1.6,
+    system: "Reason carefully before answering. Provide structured, high-signal explanations without unnecessary verbosity.",
+  },
+  {
+    id: "strict_json",
+    label: "Strict JSON",
+    temperature: 0.05,
+    topP: 0.75,
+    thinkingMode: "instant",
+    maxTokenScale: 1,
+    system: "Return valid JSON only. Do not include markdown fences, comments, or prose outside JSON.",
+  },
+];

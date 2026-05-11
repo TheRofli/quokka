@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  ApplyBenchmarkProfileRequest,
   BenchmarkRunRequest,
   BenchmarkRunResponse,
   ChatCompletionRequest,
@@ -11,6 +12,7 @@ import type {
   LogResponse,
   MetricHistoryPoint,
   ModelSettings,
+  ModelDoctorResponse,
   ModelView,
   ProfileConfig,
   SystemMetricsResponse,
@@ -167,6 +169,12 @@ export const api = {
   getLogs: (modelId: string, limit = 200) => request<LogResponse>(`/models/${modelId}/logs?limit=${limit}`),
   clearLogs: (modelId: string) => request<LogResponse>(`/models/${modelId}/logs`, { method: "DELETE" }),
   getHealth: (modelId: string) => request<HealthCheckResponse>(`/models/${modelId}/health`),
+  getModelDoctor: (modelId: string) => request<ModelDoctorResponse>(`/models/${modelId}/doctor`),
+  applyBenchmarkProfile: (modelId: string, payload: ApplyBenchmarkProfileRequest) =>
+    request<ProfileConfig>(`/models/${modelId}/apply-benchmark-profile`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   getConfig: () => request<AppConfig>("/config"),
   saveConfig: (payload: AppConfig) =>
     request<AppConfig>("/config", {

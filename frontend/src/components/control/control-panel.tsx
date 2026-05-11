@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Clipboard,
   FlaskConical,
+  Info,
   LoaderCircle,
   Logs,
   PencilLine,
@@ -14,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { api } from "@/api/client";
 import type { MetricId } from "@/components/dashboard/metric-detail-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +27,8 @@ import type {
   AppConfig,
   HealthCheckResponse,
   LogResponse,
+  ModelDoctorCheck,
+  ModelDoctorResponse,
   ModelStatus,
   ModelView,
   ProfileConfig,
@@ -294,6 +300,32 @@ function InspectorField({
   );
 }
 
+function DoctorCheckRow({ check }: { check: ModelDoctorCheck }) {
+  const icon =
+    check.status === "pass" ? (
+      <CheckCircle2 className="h-4 w-4 text-success" />
+    ) : check.status === "fail" ? (
+      <AlertTriangle className="h-4 w-4 text-danger" />
+    ) : check.status === "warn" ? (
+      <AlertTriangle className="h-4 w-4 text-warning" />
+    ) : (
+      <Info className="h-4 w-4 text-live" />
+    );
+
+  return (
+    <div className="grid gap-2 border-t border-line/55 px-4 py-3 text-sm md:grid-cols-[180px_minmax(0,1fr)]">
+      <div className="flex items-center gap-2 font-semibold text-milk/78">
+        {icon}
+        {check.label}
+      </div>
+      <div className="min-w-0">
+        <p className="break-words text-milk/68">{check.detail}</p>
+        {check.action ? <p className="mt-1 text-xs text-accent">{check.action}</p> : null}
+      </div>
+    </div>
+  );
+}
+
 export function ControlPanel({
   metrics,
   models,
@@ -332,6 +364,9 @@ export function ControlPanel({
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [doctor, setDoctor] = useState<ModelDoctorResponse | null>(null);
+  const [doctorLoading, setDoctorLoading] = useState(false);
+  const [doctorError, setDoctorError] = useState<string | null>(null);
 
   const cpuThreadMax = Math.max(1, metrics?.cpu_logical_cores ?? metrics?.cpu_physical_cores ?? 16);
   const selectedConfigModel = useMemo(
@@ -361,9 +396,60 @@ export function ControlPanel({
       .map(({ model }) => model);
   }, [models, pinnedIds]);
 
+  const modelLibraryGroups = useMemo(() => {
+    const isBroken = (model: ModelView) =>
+      model.runtime.status === "crashed" || model.runtime.status === "error" || model.runtime.status === "unhealthy";
+    const groups = [
+      { id: "running", title: "Running", items: sortedModels.filter((model) => isRunningStatus(model.runtime.status)) },
+      { id: "attention", title: "Needs attention", items: sortedModels.filter((model) => isBroken(model)) },
+      { id: "stopped", title: "Stopped", items: sortedModels.filter((model) => model.runtime.status === "stopped") },
+      {
+        id: "other",
+        title: "Other",
+        items: sortedModels.filter(
+          (model) => !isRunningStatus(model.runtime.status) && !isBroken(model) && model.runtime.status !== "stopped"
+        ),
+      },
+    ];
+    return groups.filter((group) => group.items.length);
+  }, [sortedModels]);
+
   useEffect(() => {
     window.localStorage.setItem(PINNED_MODELS_STORAGE_KEY, JSON.stringify(pinnedIds));
   }, [pinnedIds]);
+
+  useEffect(() => {
+    if (!selectedModel?.id) {
+      setDoctor(null);
+      setDoctorError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setDoctorLoading(true);
+    setDoctorError(null);
+    api
+      .getModelDoctor(selectedModel.id)
+      .then((nextDoctor) => {
+        if (!cancelled) {
+          setDoctor(nextDoctor);
+        }
+      })
+      .catch((nextError) => {
+        if (!cancelled) {
+          setDoctorError(nextError instanceof Error ? nextError.message : "Health doctor failed");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDoctorLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedModel?.id, selectedModel?.runtime.status, health?.ok, health?.detail]);
 
   useEffect(() => {
     if (!selectedModelId) {
@@ -605,7 +691,13 @@ export function ControlPanel({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            {sortedModels.map((model) => {
+            {modelLibraryGroups.map((group) => (
+              <div key={group.id}>
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line/55 bg-surface/95 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-milk/42 backdrop-blur">
+                  <span>{group.title}</span>
+                  <span>{group.items.length}</span>
+                </div>
+                {group.items.map((model) => {
               const active = selectedModelId === model.id;
               const busy = Boolean(busyModelIds[model.id]);
               const running = isRunningStatus(model.runtime.status);
@@ -708,7 +800,9 @@ export function ControlPanel({
                   </div>
                 </div>
               );
-            })}
+                })}
+              </div>
+            ))}
           </div>
         </aside>
 
@@ -839,6 +933,51 @@ export function ControlPanel({
                 {inspectorTab === "details" ? (
                   <div className="h-full min-h-0 overflow-y-auto overscroll-contain pr-1">
                     <div className="space-y-6">
+                    <section className="border border-line">
+                      <div className="flex items-center justify-between border-b border-line px-4 py-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-milk/48">Model Health Doctor</p>
+                          <p className="mt-2 text-sm text-milk/42">{doctorLoading ? "Checking model..." : doctor?.summary ?? doctorError ?? "No diagnostics yet."}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => selectedModel && void api.getModelDoctor(selectedModel.id).then(setDoctor).catch((error) => setDoctorError(error instanceof Error ? error.message : "Health doctor failed"))}
+                          className="quokka-control px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-milk/70 hover:text-accent"
+                        >
+                          Recheck
+                        </button>
+                      </div>
+                      {doctor?.checks.map((check) => <DoctorCheckRow key={check.id} check={check} />)}
+                      {doctor?.recommended_actions.length ? (
+                        <div className="border-t border-line/55 px-4 py-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-accent">Recommended fixes</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {doctor.recommended_actions.map((action) => (
+                              <span key={action} className="quokka-pill px-3 py-1.5 text-xs text-milk/62">{action}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </section>
+
+                    <section className="border border-line">
+                      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-milk/48">Quokka Lab Bridge</p>
+                          <p className="mt-2 text-sm text-milk/52">Quokka Lab can read running model endpoints from /api/lab/models.</p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="quokka-control rounded-[var(--radius-control)]"
+                          onClick={() => void navigator.clipboard.writeText(`${window.location.origin.replace(/\/$/, "")}/api/lab/models`)}
+                        >
+                          <Clipboard className="h-4 w-4" />
+                          Copy bridge URL
+                        </Button>
+                      </div>
+                    </section>
+
                     <section className="border border-line">
                       <div className="border-b border-line px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-milk/48">
                         Characteristics

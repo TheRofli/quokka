@@ -91,6 +91,29 @@ class RenameModelRequest(BaseModel):
     name: str = Field(min_length=1, max_length=140)
 
 
+class ModelDoctorCheck(BaseModel):
+    id: str
+    label: str
+    status: str = Field(pattern="^(pass|warn|fail|info)$")
+    detail: str
+    action: str | None = None
+
+
+class ModelDoctorResponse(BaseModel):
+    model_id: str
+    status: str = Field(pattern="^(ready|attention|blocked)$")
+    summary: str
+    checks: list[ModelDoctorCheck] = Field(default_factory=list)
+    recommended_actions: list[str] = Field(default_factory=list)
+
+
+class ApplyBenchmarkProfileRequest(BaseModel):
+    name: str | None = None
+    launch_params: dict[str, Any] = Field(default_factory=dict)
+    final_recommended_launch: str | None = None
+    activate: bool = True
+
+
 class RuntimeStateResponse(BaseModel):
     status: ModelStatus
     pid: int | None = None

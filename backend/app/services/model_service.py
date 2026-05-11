@@ -26,6 +26,7 @@ from app.core.errors import BadRequestError, ConflictError, NotFoundError
 from app.domain.enums import ModelStatus, ProviderType
 from app.domain.runtime import RuntimeState
 from app.schemas.api import (
+    ApplyBenchmarkProfileRequest,
     BenchmarkRunRequest,
     BenchmarkRunResponse,
     BenchmarkRunStatus,
@@ -37,6 +38,8 @@ from app.schemas.api import (
     HealthCheckResponse,
     LogResponse,
     ModelArtifactInfo,
+    ModelDoctorCheck,
+    ModelDoctorResponse,
     ModelView,
     RuntimeStateResponse,
     RenameModelRequest,
@@ -100,6 +103,140 @@ class ModelService:
         self.sync_runtime_catalog()
         model = self.config_service.get_model(model_id)
         return self._compose_model_view(model)
+
+    def diagnose_model(self, model_id: str) -> ModelDoctorResponse:
+        self.sync_runtime_catalog()
+        model = self.config_service.get_model(model_id)
+        runtime = self.runtime_states.setdefault(model.id, RuntimeState())
+        profile = model.get_active_profile()
+        model_path = str((profile.model_path if profile and profile.model_path else model.metadata.get("model_path", "")) or "")
+        checks: list[ModelDoctorCheck] = []
+        actions: list[str] = []
+
+        def add_check(check_id: str, label: str, status: str, detail: str, action: str | None = None) -> None:
+            checks.append(ModelDoctorCheck(id=check_id, label=label, status=status, detail=detail, action=action))
+            if action and status in {"warn", "fail"}:
+                actions.append(action)
+
+        if model_path:
+            if self._path_exists_for_provider(model.provider, model_path):
+                add_check("model-file", "Model file", "pass", model_path)
+            else:
+                add_check("model-file", "Model file", "fail", f"Quokka cannot see {model_path}", "Fix the model path or scan the drive again.")
+        else:
+            add_check("model-file", "Model file", "fail", "No model_path is configured.", "Open Add Model and choose a GGUF file.")
+
+        if model.provider == ProviderType.WINDOWS_LLAMA_CPP:
+            server_path = str(model.metadata.get("llama_server_path", "") or "")
+            if server_path:
+                status = "pass" if Path(server_path).exists() else "warn"
+                add_check(
+                    "llama-server",
+                    "llama-server.exe",
+                    status,
+                    server_path if status == "pass" else f"{server_path} was not found; PATH fallback may still work.",
+                    "Choose llama-server.exe in Add Model or add it to PATH." if status == "warn" else None,
+                )
+            else:
+                add_check("llama-server", "llama-server.exe", "info", "No explicit executable path. Quokka will use PATH.")
+        elif model.provider == ProviderType.WSL_LLAMA_CPP:
+            add_check("runtime", "Runtime", "warn", "This model is configured for WSL.", "Switch to Windows llama.cpp if the GGUF is on a Windows drive.")
+        else:
+            add_check("runtime", "Runtime", "info", f"Provider: {model.provider.value}")
+
+        parsed = urlparse(model.endpoint)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port
+        if port:
+            if self._is_tcp_port_open(host, port):
+                add_check("port", "Endpoint port", "pass", f"{host}:{port} is accepting TCP connections.")
+            elif runtime.status in {ModelStatus.RUNNING, ModelStatus.STARTING, ModelStatus.WARMING}:
+                add_check("port", "Endpoint port", "warn", f"{host}:{port} is not responding yet.", "Wait for model loading or check logs.")
+            else:
+                add_check("port", "Endpoint port", "info", f"{host}:{port} is closed while the model is {runtime.status.value}.")
+        else:
+            add_check("port", "Endpoint port", "fail", f"Could not parse a port from {model.endpoint}.", "Fix the model endpoint.")
+
+        if runtime.health_ok is True:
+            add_check("health", "HTTP health", "pass", f"Ready in {runtime.health_latency_ms or 0:.0f} ms.")
+        elif runtime.status in {ModelStatus.RUNNING, ModelStatus.STARTING, ModelStatus.WARMING}:
+            detail = runtime.last_error or "HTTP health is not ready."
+            add_check("health", "HTTP health", "warn", detail, "Open logs or run Health after loading finishes.")
+        else:
+            add_check("health", "HTTP health", "info", "Health checks run after the model starts.")
+
+        if runtime.last_error:
+            add_check("last-error", "Last runtime error", "warn", runtime.last_error, "Open Logs and Health Doctor before retrying.")
+
+        fail_count = sum(1 for item in checks if item.status == "fail")
+        warn_count = sum(1 for item in checks if item.status == "warn")
+        if fail_count:
+            status = "blocked"
+            summary = f"{fail_count} blocking issue{'s' if fail_count != 1 else ''} found."
+        elif warn_count:
+            status = "attention"
+            summary = f"{warn_count} item{'s' if warn_count != 1 else ''} need attention."
+        else:
+            status = "ready"
+            summary = "This model looks ready."
+
+        return ModelDoctorResponse(
+            model_id=model.id,
+            status=status,
+            summary=summary,
+            checks=checks,
+            recommended_actions=list(dict.fromkeys(actions)),
+        )
+
+    def apply_benchmark_profile(self, model_id: str, payload: ApplyBenchmarkProfileRequest) -> ProfileConfig:
+        model = self.config_service.get_model(model_id)
+        base = model.get_active_profile()
+        if base is None:
+            raise BadRequestError("Cannot create a benchmark profile because this model has no active profile.")
+
+        profile = base.model_copy(deep=True)
+        profile.id = self._unique_profile_id(model, payload.name or "benchmark-recommended")
+        profile.name = payload.name or f"Benchmark recommended {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+        allowed_fields = set(ProfileConfig.model_fields.keys()) - {"id", "name"}
+        for key, value in payload.launch_params.items():
+            if key in allowed_fields and value is not None:
+                setattr(profile, key, value)
+
+        if profile.ubatch_size > profile.batch_size:
+            profile.ubatch_size = profile.batch_size
+
+        created = self.config_service.create_profile(model_id, profile)
+        if payload.activate:
+            created = self.config_service.activate_profile(model_id, created.id)
+        return created
+
+    @staticmethod
+    def _path_exists_for_provider(provider: ProviderType, path: str) -> bool:
+        if provider == ProviderType.WINDOWS_LLAMA_CPP:
+            return Path(path).exists()
+        if provider == ProviderType.WSL_LLAMA_CPP:
+            return bool(path.startswith("/") or path.startswith("~/"))
+        return bool(path)
+
+    @staticmethod
+    def _is_tcp_port_open(host: str, port: int) -> bool:
+        try:
+            with socket.create_connection((host, port), timeout=0.25):
+                return True
+        except OSError:
+            return False
+
+    @staticmethod
+    def _unique_profile_id(model: ModelConfig, name: str) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "benchmark-profile"
+        existing = {profile.id for profile in model.profiles}
+        candidate = slug
+        index = 2
+        while candidate in existing:
+            candidate = f"{slug}-{index}"
+            index += 1
+        return candidate
 
     def discover_model_artifacts(self, query: str | None = None, limit: int = 80) -> list[DiscoveredModelArtifact]:
         limit = max(1, min(limit, 250))

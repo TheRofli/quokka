@@ -127,6 +127,29 @@ export interface CreateModelRequest {
   extra_args: string[];
 }
 
+export interface ModelDoctorCheck {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail" | "info";
+  detail: string;
+  action?: string | null;
+}
+
+export interface ModelDoctorResponse {
+  model_id: string;
+  status: "ready" | "attention" | "blocked";
+  summary: string;
+  checks: ModelDoctorCheck[];
+  recommended_actions: string[];
+}
+
+export interface ApplyBenchmarkProfileRequest {
+  name?: string | null;
+  launch_params: Record<string, unknown>;
+  final_recommended_launch?: string | null;
+  activate?: boolean;
+}
+
 export interface ModelResourceHistoryPoint {
   timestamp: string;
   model_id: string;
