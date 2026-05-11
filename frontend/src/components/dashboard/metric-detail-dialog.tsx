@@ -235,11 +235,11 @@ function StatusPill({ label, tone }: { label: string; tone: "ok" | "warning" | "
   return (
     <span
       className={cn(
-        "border px-2 py-1 text-xs font-medium",
-        tone === "ok" && "border-[#7f8c6d]/50 bg-[#7f8c6d]/12 text-[#cbd7b7]",
+        "rounded-full border px-2.5 py-1 text-xs font-medium",
+        tone === "ok" && "border-success/45 bg-success/12 text-success",
         tone === "warning" && "border-accent/55 bg-accent/15 text-accent",
         tone === "danger" && "border-danger/55 bg-danger/15 text-danger",
-        tone === "neutral" && "border-[#2A2A2A] bg-[#111111] text-milk/55"
+        tone === "neutral" && "border-line/65 bg-panel/55 text-milk/55"
       )}
     >
       {label}
@@ -255,8 +255,8 @@ function ProgressLine({ label, value, helper }: { label: string; value: number |
         <span className="text-milk/62">{label}</span>
         <span className="font-medium text-milk">{helper}</span>
       </div>
-      <div className="h-2 overflow-hidden bg-white/[0.08]">
-        <div className="h-full bg-[#FF8C42] transition-all" style={{ width: `${width}%` }} />
+      <div className="h-2 overflow-hidden rounded-full bg-milk/[0.07]">
+        <div className="h-full bg-accent transition-all" style={{ width: `${width}%` }} />
       </div>
     </div>
   );
@@ -264,7 +264,7 @@ function ProgressLine({ label, value, helper }: { label: string; value: number |
 
 function StatTile({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warning" | "danger" | "neutral" }) {
   return (
-    <div className="border border-[#252525] bg-[#111111] px-4 py-3">
+    <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-[11px] uppercase tracking-[0.2em] text-milk/35">{label}</p>
         {tone ? <StatusPill label={tone} tone={tone} /> : null}
@@ -287,7 +287,7 @@ function MetricLineChart({
 }) {
   if (!history.length) {
     return (
-      <div className="border border-[#252525] bg-[#111111] px-4 py-8 text-center text-sm text-white/55">
+      <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-8 text-center text-sm text-milk/55">
         Waiting for history samples.
       </div>
     );
@@ -335,7 +335,7 @@ function MetricLineChart({
   };
 
   return (
-    <div className="border border-[#252525] bg-[#111111] px-4 py-4">
+    <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
       <p className="mb-3 text-[11px] uppercase tracking-[0.2em] text-milk/35">{title}</p>
       <div className="h-56">
         <Line data={data} options={options} />
@@ -384,7 +384,7 @@ function ModelImpactChart({
 
   if (!datasets.length || !timestamps.length) {
     return (
-      <div className="border border-[#252525] bg-[#111111] px-4 py-8 text-center text-sm text-white/55">
+      <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-8 text-center text-sm text-milk/55">
         {config.empty}
       </div>
     );
@@ -447,7 +447,7 @@ function ModelImpactPanel({
     .sort((left, right) => (right.value ?? -1) - (left.value ?? -1));
 
   return (
-    <div className="mb-5 border border-[#252525] bg-[#111111] px-4 py-4">
+    <div className="mb-5 rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Model Impact</p>
@@ -455,7 +455,7 @@ function ModelImpactPanel({
           <p className="mt-1 text-sm text-milk/50">{config.subtitle}</p>
         </div>
         {config.note ? (
-          <span className="max-w-md border border-[#FF8C42]/35 bg-[rgba(255,140,66,0.12)] px-3 py-2 text-xs leading-5 text-white/70">
+          <span className="max-w-md rounded-[var(--radius-control)] border border-accent/35 bg-accent/12 px-3 py-2 text-xs leading-5 text-milk/70">
             {config.note}
           </span>
         ) : null}
@@ -463,14 +463,14 @@ function ModelImpactPanel({
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <ModelImpactChart metricId={metricId} history={history} models={models} />
-        <div className="overflow-hidden border border-[#252525] bg-[#0A0A0A]">
-          <div className="grid grid-cols-[minmax(0,1fr)_100px_96px] gap-3 border-b border-[#2A2A2A] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-milk/35">
+        <div className="overflow-hidden rounded-[var(--radius-control)] border border-line/70 bg-shell/45">
+          <div className="grid grid-cols-[minmax(0,1fr)_100px_96px] gap-3 border-b border-line/65 px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-milk/35">
             <span>Model</span>
             <span className="text-right">{config.valueLabel}</span>
             <span className="text-right">Link</span>
           </div>
           {rows.map(({ model, value }) => (
-            <div key={`${metricId}-${model.id}`} className="grid grid-cols-[minmax(0,1fr)_100px_96px] gap-3 border-b border-[#2A2A2A]/70 px-3 py-3 text-sm last:border-b-0">
+            <div key={`${metricId}-${model.id}`} className="grid grid-cols-[minmax(0,1fr)_100px_96px] gap-3 border-b border-line/50 px-3 py-3 text-sm last:border-b-0">
               <span className="min-w-0">
                 <span className="block truncate font-medium text-milk">{model.name}</span>
                 <span className="mt-1 block truncate text-xs text-milk/35">{model.runtime.status}</span>
@@ -501,7 +501,7 @@ function ModelLinesBlock({
 }) {
   const config = modelImpactCopy[metricId];
   return (
-    <div className="border border-[#252525] bg-[#111111] px-4 py-4">
+    <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Model lines</p>
@@ -516,9 +516,9 @@ function ModelLinesBlock({
 
 function KeyValueRows({ rows }: { rows: { label: string; value: string; tone?: "ok" | "warning" | "danger" | "neutral" }[] }) {
   return (
-    <div className="overflow-hidden border border-[#252525] bg-[#111111]">
+    <div className="overflow-hidden rounded-[var(--radius-control)] border border-line/70 bg-panel/58">
       {rows.map((row) => (
-        <div key={row.label} className="flex items-center justify-between gap-4 border-b border-[#2A2A2A]/70 px-4 py-3 last:border-b-0">
+        <div key={row.label} className="flex items-center justify-between gap-4 border-b border-line/50 px-4 py-3 last:border-b-0">
           <span className="text-[11px] uppercase tracking-[0.2em] text-milk/35">{row.label}</span>
           <span className="flex items-center gap-2 text-right text-sm font-medium text-milk">
             {row.value}
@@ -532,19 +532,19 @@ function KeyValueRows({ rows }: { rows: { label: string; value: string; tone?: "
 
 function ProcessTable({ processes, empty }: { processes: ProcessMetric[]; empty: string }) {
   if (!processes.length) {
-    return <p className="border border-[#252525] bg-[#111111] px-4 py-4 text-sm text-white/55">{empty}</p>;
+    return <p className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4 text-sm text-milk/55">{empty}</p>;
   }
 
   return (
-    <div className="overflow-hidden border border-[#252525] bg-[#111111]">
-      <div className="grid grid-cols-[70px_minmax(0,1fr)_88px_88px] gap-3 border-b border-[#2A2A2A] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-milk/35">
+    <div className="overflow-hidden rounded-[var(--radius-control)] border border-line/70 bg-panel/58">
+      <div className="grid grid-cols-[70px_minmax(0,1fr)_88px_88px] gap-3 border-b border-line/65 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-milk/35">
         <span>PID</span>
         <span>Process</span>
         <span className="text-right">CPU</span>
         <span className="text-right">RAM</span>
       </div>
       {processes.map((process) => (
-        <div key={`${process.pid}-${process.name}`} className="grid grid-cols-[70px_minmax(0,1fr)_88px_88px] gap-3 border-b border-[#2A2A2A]/70 px-4 py-3 text-sm last:border-b-0">
+        <div key={`${process.pid}-${process.name}`} className="grid grid-cols-[70px_minmax(0,1fr)_88px_88px] gap-3 border-b border-line/50 px-4 py-3 text-sm last:border-b-0">
           <span className="text-milk/55">{process.pid}</span>
           <span className="min-w-0">
             <span className="block truncate font-medium text-milk">{process.name}</span>
@@ -642,15 +642,15 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
   const history = rangedMetricHistory;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-6xl overflow-hidden border border-[#2A2A2A] bg-[#0A0A0A] shadow-[0_30px_90px_rgba(0,0,0,0.65)]">
-        <div className="flex items-start justify-between gap-4 border-b border-[#242424] px-6 py-5">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-shell/82 px-4 py-6 backdrop-blur-md">
+      <div className="quokka-zone max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-[var(--radius-soft)] shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4 border-b border-line/65 px-6 py-5">
           <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-[#FF8C42]">Metric Details</p>
-            <h2 className="mt-2 text-2xl font-semibold text-white">{content.title}</h2>
-            <p className="mt-2 text-sm text-white/55">{content.subtitle}</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-accent">Metric Details</p>
+            <h2 className="mt-2 text-2xl font-semibold text-milk">{content.title}</h2>
+            <p className="mt-2 text-sm text-milk/55">{content.subtitle}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="rounded-none border border-[#2A2A2A] bg-[#111111] text-white/75 hover:border-[#FF8C42] hover:text-[#FF8C42]">
+          <Button variant="ghost" size="icon" onClick={onClose} className="quokka-control rounded-[var(--radius-control)] text-milk/70 hover:text-accent">
             <X className="h-5 w-5" />
           </Button>
         </div>
@@ -663,10 +663,10 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
                 variant={range.id === rangeId ? "primary" : "secondary"}
                 size="sm"
                 onClick={() => setRangeId(range.id)}
-                className={`rounded-none ${
+                className={`rounded-[var(--radius-control)] ${
                   range.id === rangeId
-                    ? "border border-[#FF8C42] bg-[#FF8C42] text-[#101010] hover:bg-[#FFA766]"
-                    : "border border-[#2A2A2A] bg-[#111111] text-white/78 hover:border-[#FF8C42] hover:text-[#FF8C42]"
+                    ? "border border-accent bg-accent text-black hover:bg-accent/90"
+                    : "border border-line/70 bg-panel/55 text-milk/78 hover:border-accent/55 hover:text-accent"
                 }`}
               >
                 {range.label}
@@ -691,7 +691,7 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
               <ModelLinesBlock metricId="gpu" models={models} history={rangedModelHistory} />
               <div className="grid gap-3 md:grid-cols-2">
                 {gpuDevices.map((device) => (
-                  <div key={device.index} className="border border-[#252525] bg-[#111111] px-4 py-4">
+                  <div key={device.index} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium text-milk">{device.name}</p>
                       <StatusPill label={`GPU ${device.index}`} tone={statusTone(device.temperature_c, 72, 84)} />
@@ -779,7 +779,7 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
               />
               <ModelLinesBlock metricId="cpu" models={models} history={rangedModelHistory} />
               <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <div className="border border-[#252525] bg-[#111111] px-4 py-4">
+                <div className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
                   <p className="mb-4 text-[11px] uppercase tracking-[0.2em] text-milk/35">Per-core utilization</p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {(metrics?.cpu_cores ?? []).map((core) => (
@@ -855,7 +855,7 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
               <ModelLinesBlock metricId="disk" models={models} history={rangedModelHistory} />
               <div className="grid gap-3 md:grid-cols-2">
                 {diskPartitions.map((partition) => (
-                  <div key={`${partition.device}-${partition.mountpoint}`} className="border border-[#252525] bg-[#111111] px-4 py-4">
+                  <div key={`${partition.device}-${partition.mountpoint}`} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium text-milk">{partition.mountpoint}</p>
                       <StatusPill label={partition.fstype || "disk"} tone={statusTone(partition.usage_percent)} />
@@ -893,7 +893,7 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
               />
               <div className="grid gap-3 md:grid-cols-2">
                 {(metrics?.network_interfaces ?? []).map((networkInterface) => (
-                  <div key={networkInterface.name} className="border border-[#252525] bg-[#111111] px-4 py-4">
+                  <div key={networkInterface.name} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-medium text-milk">{networkInterface.name}</p>
                       <StatusPill label={networkInterface.is_up ? "up" : "down"} tone={networkInterface.is_up ? "ok" : "neutral"} />
@@ -916,13 +916,13 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {models.map((model) => (
-                  <div key={model.id} className="border border-[#252525] bg-[#111111] px-4 py-4">
+                  <div key={model.id} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/58 px-4 py-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium text-milk">{model.name}</p>
                         <p className="mt-1 text-sm text-milk/45">{model.endpoint}</p>
                       </div>
-                      <span className="border border-[#2A2A2A] bg-[#111111] px-2 py-1 text-xs text-milk/60">{model.runtime.status}</span>
+                      <span className="rounded-full border border-line/65 bg-panel/55 px-2 py-1 text-xs text-milk/60">{model.runtime.status}</span>
                     </div>
                     <div className="mt-4 grid grid-cols-4 gap-2 text-xs">
                       <div>
@@ -949,8 +949,8 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
                 ))}
                 {!models.length ? <p className="text-sm text-milk/50">{content.empty}</p> : null}
               </div>
-              <div className="overflow-hidden border border-[#252525] bg-[#111111]">
-                <div className="grid grid-cols-[minmax(0,1fr)_96px_96px_96px_120px] gap-3 border-b border-[#2A2A2A] px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-milk/35">
+              <div className="overflow-hidden rounded-[var(--radius-control)] border border-line/70 bg-panel/58">
+                <div className="grid grid-cols-[minmax(0,1fr)_96px_96px_96px_120px] gap-3 border-b border-line/65 px-4 py-2 text-[11px] uppercase tracking-[0.18em] text-milk/35">
                   <span>Model</span>
                   <span className="text-right">CPU</span>
                   <span className="text-right">RAM</span>
@@ -958,7 +958,7 @@ export function MetricDetailDialog({ metricId, metrics, metricHistory, models, m
                   <span className="text-right">PIDs</span>
                 </div>
                 {models.map((model) => (
-                  <div key={`${model.id}-resources`} className="grid grid-cols-[minmax(0,1fr)_96px_96px_96px_120px] gap-3 border-b border-[#2A2A2A]/70 px-4 py-3 text-sm last:border-b-0">
+                  <div key={`${model.id}-resources`} className="grid grid-cols-[minmax(0,1fr)_96px_96px_96px_120px] gap-3 border-b border-line/50 px-4 py-3 text-sm last:border-b-0">
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-milk">{model.name}</span>
                       <span className="mt-1 block truncate text-xs text-milk/35">

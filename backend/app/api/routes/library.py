@@ -182,7 +182,7 @@ def search_models(query: str = Query(default="gemma gguf", min_length=1, max_len
         entry = _entry_from_hf_model(item)
         if entry.files or "gguf" in " ".join(entry.tags).lower() or "gguf" in entry.repo_id.lower():
             entries.append(entry)
-    return ModelLibrarySearchResponse(query=query, entries=entries[:10])
+    return ModelLibrarySearchResponse(query=query, entries=entries[:24])
 
 
 @router.post("/resolve", response_model=ModelLibraryEntry)

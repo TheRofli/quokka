@@ -65,6 +65,12 @@ const STORAGE_KEY = "quokka.chat.sessions.v1";
 const SIDEBAR_STORAGE_KEY = "quokka.chat.rightSidebar.open";
 const AUTO_MAX_TOKENS_CAP = 16_384;
 const imageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const quickPrompts = [
+  "Explain why this model is slow and what to tune first.",
+  "Compare these two local models for coding work.",
+  "Rewrite this prompt to be clearer and stricter.",
+  "Summarize this llama.cpp log and list fixes.",
+];
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -379,6 +385,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
     sessionModel && ["running", "warming"].includes(sessionModel.runtime.status)
       ? sessionModel
       : activeModels[0] ?? sessionModel ?? models[0] ?? null;
+  const selectedModelReady = selectedModel ? ["running", "warming"].includes(selectedModel.runtime.status) : false;
   const contextSize = selectedModel?.active_profile?.context_size ?? 0;
   const usedTokens = useMemo(() => {
     const historyTokens =
@@ -558,7 +565,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
   };
 
   const send = async () => {
-    if (!activeSession || !selectedModel || (!draft.trim() && !attachments.length)) {
+    if (!activeSession || !selectedModelReady || !selectedModel || (!draft.trim() && !attachments.length)) {
       return;
     }
 
@@ -837,9 +844,27 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                   </button>
                 </div>
                 <p className="mt-5 max-w-2xl text-sm leading-6 text-milk/54">
-                  Calm local chat for prompts, logs, configs, and model behavior checks. The global Quokka bar above keeps live tok/s,
-                  context, GPU and VRAM visible without turning the conversation into a dashboard.
+                  Calm local chat for prompts, logs, configs, and model behavior checks. Start a local model first, then use Quokka as a quiet
+                  runtime-aware assistant instead of a noisy dashboard.
                 </p>
+                {!selectedModelReady ? (
+                  <div className="mt-5 rounded-full border border-warning/35 bg-warning/10 px-4 py-2 text-sm text-warning">
+                    Selected model is {selectedModel?.runtime.status ?? "offline"}. Start it in Local Panel before chatting.
+                  </div>
+                ) : null}
+                <div className="mt-6 flex max-w-3xl flex-wrap justify-center gap-2">
+                  {quickPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      onClick={() => setDraft(prompt)}
+                      disabled={!selectedModelReady}
+                      className="rounded-full border border-line/60 bg-panel/48 px-3 py-2 text-sm text-milk/62 transition hover:border-accent/45 hover:text-milk disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
                 <div className="mt-7 grid w-full max-w-3xl gap-3 text-left md:grid-cols-3">
                   <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
                     <p className="text-sm font-semibold text-milk">Ask the model</p>
@@ -915,7 +940,8 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                       void send();
                     }
                   }}
-                  placeholder={`Message ${selectedModel?.name || "Quokka local model"}...`}
+                  placeholder={selectedModelReady ? `Message ${selectedModel?.name || "Quokka local model"}...` : "Start a model in Local Panel before chatting..."}
+                  disabled={!selectedModelReady}
                   className="min-h-[94px] resize-none border-0 bg-transparent px-2 py-2 text-base text-milk shadow-none outline-none placeholder:text-milk/34 focus-visible:ring-0"
                 />
 
@@ -1014,7 +1040,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                       <Button
                         variant="primary"
                         size="sm"
-                        disabled={!selectedModel}
+                      disabled={!selectedModelReady}
                         onClick={() => void send()}
                         className="h-10 rounded-full bg-accent px-4 text-black hover:bg-accent/90"
                       >
