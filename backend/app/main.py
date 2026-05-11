@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import chat, config, lab, models, profiles, system
+from app.api.routes import chat, config, lab, library, models, profiles, system
 from app.core.logging import configure_logging
 from app.core.settings import get_settings
 from app.services.config_service import ConfigService
@@ -57,7 +57,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
         title="Quokka",
-        version="0.1.0",
+        version="0.2.0",
         summary="Local AI model control center",
         lifespan=lifespan,
     )
@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(config.router, prefix=settings.api_prefix)
     app.include_router(chat.router, prefix=settings.api_prefix)
     app.include_router(lab.router, prefix=settings.api_prefix)
+    app.include_router(library.router, prefix=settings.api_prefix)
 
     frontend_dist = settings.frontend_dist
     if frontend_dist.exists():

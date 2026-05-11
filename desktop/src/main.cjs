@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, Menu, Tray, shell } = require("electron");
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, shell } = require("electron");
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -80,6 +80,46 @@ function logDesktop(message) {
   }
 }
 
+function registerIpcHandlers() {
+  ipcMain.handle("quokka:open-file", async (_event, options = {}) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: options.title || "Choose a file",
+      properties: ["openFile"],
+      filters: options.filters || [{ name: "All files", extensions: ["*"] }],
+    });
+    return result.canceled ? null : result.filePaths[0] || null;
+  });
+
+  ipcMain.handle("quokka:open-folder", async (_event, options = {}) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: options.title || "Choose a folder",
+      properties: ["openDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0] || null;
+  });
+
+  ipcMain.handle("quokka:open-external", async (_event, url) => {
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+      return false;
+    }
+    await shell.openExternal(url);
+    return true;
+  });
+
+  ipcMain.handle("quokka:run-update", async () => {
+    const updater = path.join(app.getPath("localappdata"), "Quokka", "bin", "quokka-update.cmd");
+    if (!fs.existsSync(updater)) {
+      return { ok: false, message: "quokka-update.cmd was not found. Re-run the GitHub installer once." };
+    }
+    childProcess.spawn("cmd.exe", ["/c", "start", "", updater, "-Launch"], {
+      detached: true,
+      windowsHide: true,
+      stdio: "ignore",
+    }).unref();
+    return { ok: true, message: "Updater launched. Quokka will restart when the update finishes." };
+  });
+}
+
 async function backendSupportsCurrentApi() {
   try {
     const metrics = await requestJson(METRICS_URL);
@@ -149,10 +189,13 @@ async function waitForBackend(timeoutMs = 30000) {
 }
 
 function backendEnvironment() {
+  const dataDir = path.join(app.getPath("userData"), "data");
+  fs.mkdirSync(dataDir, { recursive: true });
   return {
     ...process.env,
     QUOKKA_PROJECT_ROOT: projectRoot(),
     QUOKKA_CONFIG_PATH: configPath(),
+    QUOKKA_DATA_DIR: dataDir,
     QUOKKA_LOGS_DIR: logsDir(),
     QUOKKA_FRONTEND_DIST: frontendDistDir(),
     QUOKKA_BACKEND_HOST: HOST,
@@ -405,6 +448,7 @@ async function bootstrap() {
 
 app.whenReady().then(() => {
   logDesktop("Electron app is ready.");
+  registerIpcHandlers();
   bootstrap().catch((error) => {
     updateTray("danger");
     logDesktop(`Bootstrap failed: ${error.message}`);

@@ -2,7 +2,7 @@ import { Cpu, Database, Gauge, HardDrive, Plus, Server, TestTube2, Zap, type Luc
 
 import type { ModelStatus, ModelView, SystemMetricsResponse } from "@/types/api";
 
-type AppMode = "control" | "chat" | "tests" | "settings";
+type AppMode = "control" | "library" | "chat" | "tests" | "settings";
 
 interface TopStatusBarProps {
   mode: AppMode;
@@ -15,6 +15,7 @@ interface TopStatusBarProps {
 
 const modeLabels: Record<AppMode, string> = {
   control: "Local Panel",
+  library: "Model Library",
   chat: "Chat",
   tests: "LLM Tests",
   settings: "Settings",

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FileSearch, HardDrive, Plus, RefreshCw, Server, SlidersHorizontal, X } from "lucide-react";
+import { CheckCircle2, FileCheck2, FileSearch, FolderOpen, HardDrive, Plus, RefreshCw, Server, SlidersHorizontal, X } from "lucide-react";
 
 import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatNumber } from "@/lib/utils";
-import type { CreateModelRequest, DiscoveredModelArtifact, ModelView } from "@/types/api";
+import type { CreateModelRequest, DiscoveredModelArtifact, ModelView, RuntimeSetupCheckResponse, TestLaunchResponse } from "@/types/api";
 
 interface AddModelDialogProps {
   open: boolean;
@@ -120,6 +120,9 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
   const [isBulkImporting, setIsBulkImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [runtimeCheck, setRuntimeCheck] = useState<RuntimeSetupCheckResponse | null>(null);
+  const [testLaunch, setTestLaunch] = useState<TestLaunchResponse | null>(null);
+  const [isTestingLaunch, setIsTestingLaunch] = useState(false);
   const [step, setStep] = useState<WizardStep>("source");
   const wasOpenRef = useRef(false);
 
@@ -135,7 +138,17 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
       setSelectedPath(null);
       setError(null);
       setNotice(null);
+      setTestLaunch(null);
       setStep("source");
+      api
+        .getRuntimeSetupCheck()
+        .then((check) => {
+          setRuntimeCheck(check);
+          if (check.llama_server_candidates[0]) {
+            setDraft((current) => ({ ...current, llama_server_path: current.llama_server_path || check.llama_server_candidates[0] }));
+          }
+        })
+        .catch(() => setRuntimeCheck(null));
     }
     wasOpenRef.current = open;
   }, [models, open]);
@@ -207,6 +220,10 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
       setError("Paste a Windows path like D:\\Models\\model.gguf or choose a discovered GGUF file.");
       return;
     }
+    if (/\.(safetensors|bin|pt|pth)$/i.test(path)) {
+      setError("This looks like a non-GGUF model file. Quokka Windows llama.cpp launch needs a .gguf file.");
+      return;
+    }
 
     setSelectedPath(null);
     setDraft((current) => ({
@@ -218,6 +235,58 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
     }));
     setError(null);
     setStep("configure");
+  };
+
+  const chooseModelFile = async () => {
+    if (!window.quokkaDesktop?.openFile) {
+      setError("File picker is available in the Quokka desktop app. In browser mode, paste the full GGUF path.");
+      return;
+    }
+    const path = await window.quokkaDesktop.openFile({
+      title: "Choose a GGUF model",
+      filters: [{ name: "GGUF models", extensions: ["gguf"] }],
+    });
+    if (path) {
+      setQuery(path);
+      applyManualPath(path);
+    }
+  };
+
+  const chooseLlamaServer = async () => {
+    if (!window.quokkaDesktop?.openFile) {
+      setError("File picker is available in the Quokka desktop app. Paste the llama-server.exe path manually.");
+      return;
+    }
+    const path = await window.quokkaDesktop.openFile({
+      title: "Choose llama-server.exe",
+      filters: [{ name: "llama.cpp server", extensions: ["exe"] }],
+    });
+    if (path) {
+      setDraft((current) => ({ ...current, provider: "windows_llama_cpp", llama_server_path: path }));
+      setError(null);
+    }
+  };
+
+  const runTestLaunch = async () => {
+    setIsTestingLaunch(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await api.testModelLaunch(draft);
+      setTestLaunch(result);
+      if (result.llama_server_path && !draft.llama_server_path) {
+        setDraft((current) => ({ ...current, llama_server_path: result.llama_server_path ?? current.llama_server_path }));
+      }
+      if (result.ok) {
+        setNotice(result.summary);
+      } else {
+        setError(result.summary);
+      }
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Launch preflight failed");
+    } finally {
+      setIsTestingLaunch(false);
+    }
   };
 
   const create = async () => {
@@ -343,6 +412,10 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                   <Button variant="secondary" onClick={() => applyManualPath()} className="quokka-control rounded-[var(--radius-control)] px-4 text-milk/85 hover:text-accent">
                     Use path
                   </Button>
+                  <Button variant="secondary" onClick={() => void chooseModelFile()} className="quokka-control rounded-[var(--radius-control)] px-4 text-milk/85 hover:text-accent">
+                    <FolderOpen className="h-4 w-4" />
+                    Pick file
+                  </Button>
                   <Button
                     variant="secondary"
                     onClick={() => void importAllFound()}
@@ -400,6 +473,15 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                   <p>WSL paths still work when the file lives inside Linux.</p>
                   <p>Quokka will expose running models to Quokka Lab through /api/lab/models.</p>
                 </div>
+                <div className="mt-5 rounded-[var(--radius-control)] border border-line/60 bg-shell/45 p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/42">Windows setup</p>
+                  <p className="mt-2 text-sm text-milk/58">
+                    {runtimeCheck?.llama_server_candidates.length
+                      ? `Found ${runtimeCheck.llama_server_candidates.length} llama-server.exe candidate.`
+                      : "No llama-server.exe found yet."}
+                  </p>
+                  {runtimeCheck?.llama_server_candidates[0] ? <p className="mt-2 break-all font-mono text-xs text-live/70">{runtimeCheck.llama_server_candidates[0]}</p> : null}
+                </div>
               </aside>
             </div>
           ) : null}
@@ -444,12 +526,17 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                 {draft.provider === "windows_llama_cpp" ? (
                   <label className="space-y-1">
                     <span className={fieldLabelClass}>llama-server.exe</span>
-                    <Input
-                      value={draft.llama_server_path ?? ""}
-                      onChange={(event) => setDraft((current) => ({ ...current, llama_server_path: event.target.value || null }))}
-                      placeholder="Optional: leave empty if llama-server.exe is in PATH"
-                      className={inputClass}
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        value={draft.llama_server_path ?? ""}
+                        onChange={(event) => setDraft((current) => ({ ...current, llama_server_path: event.target.value || null }))}
+                        placeholder="Optional: leave empty if llama-server.exe is in PATH"
+                        className={inputClass}
+                      />
+                      <Button type="button" variant="secondary" className="quokka-control rounded-[var(--radius-control)] px-3" onClick={() => void chooseLlamaServer()}>
+                        Pick
+                      </Button>
+                    </div>
                     <p className="text-xs text-milk/42">Windows launch uses this executable directly and does not require WSL.</p>
                   </label>
                 ) : (
@@ -503,6 +590,19 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                   <span>Batch: {draft.batch_size} / u{draft.ubatch_size}</span>
                   <span>KV cache: {draft.cache_type_k}/{draft.cache_type_v}</span>
                 </div>
+                {testLaunch ? (
+                  <div className="mt-5 rounded-[var(--radius-control)] border border-line/65 bg-shell/45 p-3">
+                    <p className={cn("text-sm font-semibold", testLaunch.ok ? "text-success" : "text-danger")}>{testLaunch.summary}</p>
+                    <div className="mt-3 space-y-2">
+                      {testLaunch.checks.map((check) => (
+                        <div key={check.id} className="text-xs leading-5">
+                          <span className={check.status === "pass" ? "text-success" : check.status === "fail" ? "text-danger" : "text-warning"}>{check.label}: </span>
+                          <span className="text-milk/52">{check.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </aside>
             </div>
           ) : null}
@@ -554,9 +654,17 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                 {isSaving ? "Adding" : "Add Model"}
               </Button>
             ) : (
-              <Button variant="primary" className="rounded-[var(--radius-control)]" onClick={goNext}>
-                Continue
-              </Button>
+              <>
+                {step === "configure" ? (
+                  <Button variant="secondary" className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runTestLaunch()} disabled={isTestingLaunch || !draft.model_path}>
+                    <FileCheck2 className="h-4 w-4" />
+                    {isTestingLaunch ? "Testing" : "Test launch"}
+                  </Button>
+                ) : null}
+                <Button variant="primary" className="rounded-[var(--radius-control)]" onClick={goNext}>
+                  Continue
+                </Button>
+              </>
             )}
           </div>
         </div>

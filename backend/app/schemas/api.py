@@ -49,6 +49,21 @@ class DiscoveredModelArtifact(BaseModel):
     suggested_name: str
 
 
+class RuntimeSetupCheck(BaseModel):
+    id: str
+    label: str
+    status: str = Field(pattern="^(pass|warn|fail|info)$")
+    detail: str
+
+
+class RuntimeSetupCheckResponse(BaseModel):
+    os: str
+    models_dir: str
+    llama_server_candidates: list[str] = Field(default_factory=list)
+    path_has_llama_server: bool = False
+    checks: list[RuntimeSetupCheck] = Field(default_factory=list)
+
+
 class CreateModelRequest(BaseModel):
     provider: ProviderType = ProviderType.WINDOWS_LLAMA_CPP
     name: str
@@ -124,6 +139,13 @@ class ModelDoctorFixRequest(BaseModel):
     value: str | int | None = None
 
 
+class TestLaunchResponse(BaseModel):
+    ok: bool
+    summary: str
+    checks: list[RuntimeSetupCheck] = Field(default_factory=list)
+    llama_server_path: str | None = None
+
+
 class ApplyBenchmarkProfileRequest(BaseModel):
     name: str | None = None
     launch_params: dict[str, Any] = Field(default_factory=dict)
@@ -178,6 +200,68 @@ class BulkImportModelsResponse(BaseModel):
     created: list[ModelView] = Field(default_factory=list)
     skipped: list[DiscoveredModelArtifact] = Field(default_factory=list)
     errors: list[BulkImportError] = Field(default_factory=list)
+
+
+class AppUpdateResponse(BaseModel):
+    current_version: str
+    latest_version: str | None = None
+    update_available: bool = False
+    release_url: str | None = None
+    installer_url: str | None = None
+    source_install: bool = False
+    checked_at: datetime
+    message: str
+
+
+class ModelLibraryFile(BaseModel):
+    filename: str
+    size_bytes: int | None = None
+    quantization: str | None = None
+    download_url: str
+
+
+class ModelLibraryEntry(BaseModel):
+    id: str
+    name: str
+    repo_id: str
+    description: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    likes: int | None = None
+    downloads: int | None = None
+    files: list[ModelLibraryFile] = Field(default_factory=list)
+
+
+class ModelLibrarySearchResponse(BaseModel):
+    query: str
+    entries: list[ModelLibraryEntry] = Field(default_factory=list)
+
+
+class ResolveModelReferenceRequest(BaseModel):
+    reference: str
+
+
+class ModelDownloadRequest(BaseModel):
+    url: str | None = None
+    repo_id: str | None = None
+    filename: str | None = None
+    revision: str = "main"
+    target_dir: str | None = None
+    name: str | None = None
+
+
+class ModelDownloadStatus(BaseModel):
+    id: str
+    status: str = Field(pattern="^(queued|downloading|completed|cancelled|failed)$")
+    label: str
+    url: str
+    file_name: str
+    target_path: str
+    bytes_downloaded: int = 0
+    total_bytes: int | None = None
+    progress_percent: float = 0.0
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class LabModelConnection(BaseModel):

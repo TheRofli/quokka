@@ -95,6 +95,6 @@ class ModelConfig(BaseModel):
 
 class AppConfig(BaseModel):
     app_name: str = "Quokka"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     refresh_interval_seconds: int = Field(default=5, ge=2)
     models: list[ModelConfig] = Field(default_factory=list)

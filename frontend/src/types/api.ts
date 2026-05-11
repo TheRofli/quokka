@@ -102,6 +102,21 @@ export interface DiscoveredModelArtifact {
   suggested_name: string;
 }
 
+export interface RuntimeSetupCheck {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail" | "info";
+  detail: string;
+}
+
+export interface RuntimeSetupCheckResponse {
+  os: string;
+  models_dir: string;
+  llama_server_candidates: string[];
+  path_has_llama_server: boolean;
+  checks: RuntimeSetupCheck[];
+}
+
 export interface CreateModelRequest {
   provider: ProviderType;
   name: string;
@@ -146,6 +161,17 @@ export interface BulkImportModelsResponse {
   errors: Array<{ path: string; message: string }>;
 }
 
+export interface AppUpdateResponse {
+  current_version: string;
+  latest_version?: string | null;
+  update_available: boolean;
+  release_url?: string | null;
+  installer_url?: string | null;
+  source_install: boolean;
+  checked_at: string;
+  message: string;
+}
+
 export interface ModelDoctorCheck {
   id: string;
   label: string;
@@ -165,6 +191,64 @@ export interface ModelDoctorResponse {
 export interface ModelDoctorFixRequest {
   action: "change_port" | "switch_windows_runtime" | "set_llama_server_path" | "set_model_path";
   value?: string | number | null;
+}
+
+export interface TestLaunchResponse {
+  ok: boolean;
+  summary: string;
+  checks: RuntimeSetupCheck[];
+  llama_server_path?: string | null;
+}
+
+export interface ModelLibraryFile {
+  filename: string;
+  size_bytes?: number | null;
+  quantization?: string | null;
+  download_url: string;
+}
+
+export interface ModelLibraryEntry {
+  id: string;
+  name: string;
+  repo_id: string;
+  description?: string | null;
+  tags: string[];
+  likes?: number | null;
+  downloads?: number | null;
+  files: ModelLibraryFile[];
+}
+
+export interface ModelLibrarySearchResponse {
+  query: string;
+  entries: ModelLibraryEntry[];
+}
+
+export interface ResolveModelReferenceRequest {
+  reference: string;
+}
+
+export interface ModelDownloadRequest {
+  url?: string | null;
+  repo_id?: string | null;
+  filename?: string | null;
+  revision?: string;
+  target_dir?: string | null;
+  name?: string | null;
+}
+
+export interface ModelDownloadStatus {
+  id: string;
+  status: "queued" | "downloading" | "completed" | "cancelled" | "failed";
+  label: string;
+  url: string;
+  file_name: string;
+  target_path: string;
+  bytes_downloaded: number;
+  total_bytes?: number | null;
+  progress_percent: number;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ApplyBenchmarkProfileRequest {

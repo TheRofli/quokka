@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { AlertTriangle, FlaskConical, MessageSquare, PanelLeft, Settings } from "lucide-react";
+import { AlertTriangle, DownloadCloud, FlaskConical, MessageSquare, PanelLeft, Settings, Sparkles } from "lucide-react";
 
 import { ControlPanel } from "@/components/control/control-panel";
 import { TopStatusBar } from "@/components/app/top-status-bar";
@@ -7,11 +7,14 @@ import { AddModelDialog } from "@/components/dashboard/add-model-dialog";
 import type { MetricId } from "@/components/dashboard/metric-detail-dialog";
 import { FirstRunWizard } from "@/components/onboarding/first-run-wizard";
 import { RuntimeErrorBoundary } from "@/components/runtime-error-boundary";
+import { api } from "@/api/client";
 import { useQuokkaDashboard } from "@/hooks/use-quokka-dashboard";
 import { formatTimestamp } from "@/lib/utils";
+import type { AppUpdateResponse } from "@/types/api";
 
 const ChatWorkspace = lazy(() => import("@/components/chat/chat-workspace").then((module) => ({ default: module.ChatWorkspace })));
 const BenchmarkDialog = lazy(() => import("@/components/dashboard/benchmark-dialog").then((module) => ({ default: module.BenchmarkDialog })));
+const ModelLibrary = lazy(() => import("@/components/library/model-library").then((module) => ({ default: module.ModelLibrary })));
 const MetricDetailDialog = lazy(() => import("@/components/dashboard/metric-detail-dialog").then((module) => ({ default: module.MetricDetailDialog })));
 
 const themes = [
@@ -71,12 +74,14 @@ function LazyPanelFallback({ label }: { label: string }) {
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.localStorage.getItem("quokka.sidebar.open") !== "0");
-  const [mode, setMode] = useState<"control" | "chat" | "tests" | "settings">("control");
+  const [mode, setMode] = useState<"control" | "library" | "chat" | "tests" | "settings">("control");
   const [chatMounted, setChatMounted] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => window.localStorage.getItem("quokka.theme") ?? "quokka");
   const [firstRunDismissed, setFirstRunDismissed] = useState(() => window.localStorage.getItem("quokka.firstRun.dismissed") === "1");
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateResponse | null>(null);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const {
     metrics,
     metricHistory,
@@ -114,9 +119,28 @@ function App() {
     }
   }, [mode]);
 
+  useEffect(() => {
+    api.getUpdateStatus().then(setUpdateStatus).catch(() => setUpdateStatus(null));
+  }, []);
+
   const dismissFirstRun = () => {
     setFirstRunDismissed(true);
     window.localStorage.setItem("quokka.firstRun.dismissed", "1");
+  };
+
+  const runUpdate = async () => {
+    if (window.quokkaDesktop?.runUpdate) {
+      const result = await window.quokkaDesktop.runUpdate();
+      setUpdateMessage(result.message);
+      return;
+    }
+    if (updateStatus?.release_url) {
+      window.open(updateStatus.release_url, "_blank", "noopener,noreferrer");
+      setUpdateMessage("Opened the latest GitHub release in your browser.");
+      return;
+    }
+    await navigator.clipboard.writeText("quokka update");
+    setUpdateMessage("Copied: quokka update");
   };
 
   return (
@@ -157,6 +181,7 @@ function App() {
               <nav className="space-y-1">
                 {[
                   { id: "control", label: "Local Panel", icon: PanelLeft },
+                  { id: "library", label: "Model Library", icon: DownloadCloud },
                   { id: "chat", label: "Chat", icon: MessageSquare },
                   { id: "tests", label: "LLM Tests", icon: FlaskConical },
                   { id: "settings", label: "Settings", icon: Settings },
@@ -194,6 +219,14 @@ function App() {
                 </button>
                 <button
                   className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+                    mode === "library" ? "border-accent bg-accent text-[#171410]" : "border-line bg-white/[0.03] text-milk/62"
+                  }`}
+                  onClick={() => setMode("library")}
+                >
+                  Model Library
+                </button>
+                <button
+                  className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                     mode === "chat" ? "border-accent bg-accent text-[#171410]" : "border-line bg-white/[0.03] text-milk/62"
                   }`}
                   onClick={() => setMode("chat")}
@@ -227,6 +260,21 @@ function App() {
             onOpenTests={() => setMode("tests")}
           />
 
+        {updateStatus?.update_available ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] border border-live/35 bg-live/10 px-4 py-3 text-sm text-milk">
+            <div className="flex items-center gap-3">
+              <Sparkles className="h-4 w-4 text-live" />
+              <span>
+                Quokka update available: v{updateStatus.current_version} -&gt; v{updateStatus.latest_version}
+                {updateMessage ? <span className="ml-2 text-milk/50">{updateMessage}</span> : null}
+              </span>
+            </div>
+            <button type="button" onClick={() => void runUpdate()} className="quokka-control px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-live hover:border-live/60">
+              Update
+            </button>
+          </div>
+        ) : null}
+
         {error ? (
           <div className="mt-3 flex items-center gap-3 rounded-lg border border-danger/45 bg-danger/10 px-4 py-3 text-sm text-milk">
             <AlertTriangle className="h-4 w-4 text-danger" />
@@ -237,6 +285,7 @@ function App() {
         {mode === "control" && !models.length && !firstRunDismissed ? (
           <FirstRunWizard
             onAddModel={() => setAddModelOpen(true)}
+            onOpenLibrary={() => setMode("library")}
             onOpenTests={() => setMode("tests")}
             onDismiss={dismissFirstRun}
           />
@@ -253,6 +302,12 @@ function App() {
         {mode === "tests" ? (
           <Suspense fallback={<LazyPanelFallback label="Loading LLM Tests..." />}>
             <BenchmarkDialog open embedded models={models} onClose={() => setMode("control")} />
+          </Suspense>
+        ) : null}
+
+        {mode === "library" ? (
+          <Suspense fallback={<LazyPanelFallback label="Loading Model Library..." />}>
+            <ModelLibrary models={models} onAdded={refreshDashboard} />
           </Suspense>
         ) : null}
 
@@ -292,13 +347,13 @@ function App() {
                 <p className="text-xs uppercase tracking-[0.24em] text-accent">Install & Update</p>
                 <h2 className="mt-2 text-xl font-semibold text-milk">Friend-friendly terminal flow</h2>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
-                  Install once, run Quokka with `quokka`, update with `quokka-update`, and let Quokka Lab discover running models through `/api/lab/models`.
+                  Install once, run Quokka with `quokka`, update with `quokka update`, and let Quokka Lab discover running models through `/api/lab/models`.
                 </p>
                 <div className="mt-4 grid gap-3 lg:grid-cols-3">
                   {[
                     { label: "Install", command: "git clone https://github.com/TheRofli/Quokka.git && cd Quokka && .\\install-quokka.ps1" },
                     { label: "Open", command: "quokka" },
-                    { label: "Update", command: "quokka-update" },
+                    { label: "Update", command: "quokka update" },
                   ].map((item) => (
                     <div key={item.label} className="rounded-lg border border-line/70 bg-shell/40 px-3 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/38">{item.label}</p>

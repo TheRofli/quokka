@@ -19,6 +19,8 @@ from app.schemas.api import (
     ModelDoctorResponse,
     ModelView,
     RenameModelRequest,
+    RuntimeSetupCheckResponse,
+    TestLaunchResponse,
 )
 from app.schemas.config import ModelSettings, ProfileConfig
 from app.services.model_service import ModelService
@@ -51,6 +53,19 @@ def bulk_import_models(
     model_service: ModelService = Depends(get_model_service),
 ) -> BulkImportModelsResponse:
     return model_service.bulk_import_models(payload)
+
+
+@router.get("/runtime-check", response_model=RuntimeSetupCheckResponse)
+def runtime_setup_check(model_service: ModelService = Depends(get_model_service)) -> RuntimeSetupCheckResponse:
+    return model_service.get_runtime_setup_check()
+
+
+@router.post("/test-launch", response_model=TestLaunchResponse)
+def test_model_launch(
+    payload: CreateModelRequest,
+    model_service: ModelService = Depends(get_model_service),
+) -> TestLaunchResponse:
+    return model_service.test_model_launch(payload)
 
 
 @router.get("/{model_id}", response_model=ModelView)

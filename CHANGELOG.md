@@ -7,3 +7,6 @@
 - Added bulk GGUF import so a folder such as `D:\Models` can be scanned and imported without adding every file manually.
 - Added LLM Tests profile diff preview before saving a benchmark recommendation as an active launch profile.
 - Added a release helper at `scripts/release.ps1` that runs backend/frontend checks before tagging a version.
+- Added Model Library v1 for Hugging Face GGUF search, direct URL resolve, downloads, and add-to-Quokka flow.
+- Added Windows llama.cpp setup checks, `llama-server.exe` discovery, desktop file/folder pickers, and Add Model launch preflight.
+- Added in-app GitHub release update banner and a Windows installer build helper.

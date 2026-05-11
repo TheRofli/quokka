@@ -24,7 +24,7 @@ class ConfigService:
                 self._config_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
             else:
                 self._config_path.write_text(
-                    "app_name: Quokka\nversion: 0.1.0\nrefresh_interval_seconds: 5\nmodels: []\n",
+                    "app_name: Quokka\nversion: 0.2.0\nrefresh_interval_seconds: 5\nmodels: []\n",
                     encoding="utf-8",
                 )
 

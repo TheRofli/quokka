@@ -51,7 +51,7 @@ function Ensure-QuokkaConfig {
     else {
         @"
 app_name: Quokka
-version: 0.1.0
+version: 0.2.0
 refresh_interval_seconds: 5
 models: []
 "@ | Set-Content -Path $configPath -Encoding UTF8

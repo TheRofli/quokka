@@ -1,5 +1,6 @@
 import type {
   AppConfig,
+  AppUpdateResponse,
   ApplyBenchmarkProfileRequest,
   BenchmarkRunRequest,
   BenchmarkRunResponse,
@@ -16,9 +17,16 @@ import type {
   ModelSettings,
   ModelDoctorFixRequest,
   ModelDoctorResponse,
+  ModelDownloadRequest,
+  ModelDownloadStatus,
+  ModelLibraryEntry,
+  ModelLibrarySearchResponse,
   ModelView,
   ProfileConfig,
+  ResolveModelReferenceRequest,
+  RuntimeSetupCheckResponse,
   SystemMetricsResponse,
+  TestLaunchResponse,
 } from "@/types/api";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
@@ -123,6 +131,7 @@ async function streamRequest<TPayload>(
 
 export const api = {
   getMetrics: () => request<SystemMetricsResponse>("/system/metrics"),
+  getUpdateStatus: () => request<AppUpdateResponse>("/system/update"),
   createChatCompletion: (payload: ChatCompletionRequest) =>
     request<ChatCompletionResponse>("/chat/completion", {
       method: "POST",
@@ -141,6 +150,12 @@ export const api = {
     }),
   bulkImportModels: (payload: BulkImportModelsRequest) =>
     request<BulkImportModelsResponse>("/models/bulk-import", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getRuntimeSetupCheck: () => request<RuntimeSetupCheckResponse>("/models/runtime-check"),
+  testModelLaunch: (payload: CreateModelRequest) =>
+    request<TestLaunchResponse>("/models/test-launch", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -213,4 +228,19 @@ export const api = {
     request<ProfileConfig>(`/models/${modelId}/profiles/${profileId}/activate`, {
       method: "POST",
     }),
+  getFeaturedLibraryModels: () => request<ModelLibraryEntry[]>("/library/featured"),
+  searchLibraryModels: (query: string) => request<ModelLibrarySearchResponse>(`/library/search?query=${encodeURIComponent(query)}`),
+  resolveLibraryReference: (payload: ResolveModelReferenceRequest) =>
+    request<ModelLibraryEntry>("/library/resolve", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  startModelDownload: (payload: ModelDownloadRequest) =>
+    request<ModelDownloadStatus>("/library/downloads", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getModelDownloads: () => request<ModelDownloadStatus[]>("/library/downloads"),
+  cancelModelDownload: (downloadId: string) =>
+    request<ModelDownloadStatus>(`/library/downloads/${downloadId}/cancel`, { method: "POST" }),
 };

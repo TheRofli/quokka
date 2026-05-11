@@ -46,6 +46,17 @@ Requirements:
 - Node.js LTS
 - Python 3.11+
 
+## Model Library
+
+Quokka includes a `Model Library` page for friend-friendly local setup:
+
+- search Hugging Face for GGUF repositories;
+- paste a Hugging Face model URL or direct `.gguf` file URL;
+- download models into Quokka's local models folder or a folder you choose;
+- add a completed download to the Local Panel as a Windows `llama.cpp` runtime.
+
+For Windows-only users, install a `llama.cpp` Windows build and point Quokka at `llama-server.exe` when Add Model asks for it. WSL is optional, not required.
+
 ## Quokka Lab Integration
 
 Quokka is now the local model control app. The coding-agent workspace lives in the separate Quokka Lab app.
@@ -252,6 +263,14 @@ npm run build
 ```
 
 Output goes to `desktop/release/`.
+
+Shortcut build:
+
+```powershell
+.\scripts\build-windows-installer.ps1
+```
+
+The NSIS installer creates Desktop and Start Menu shortcuts named `Quokka`. For in-app update notices, publish the generated installer in a GitHub Release such as `v0.2.0`; Quokka checks the latest release and shows an Update button when the release version is newer than the local config version.
 
 ## Notes
 

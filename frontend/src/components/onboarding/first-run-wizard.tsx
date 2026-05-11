@@ -1,15 +1,24 @@
-import { Copy, FileSearch, FlaskConical, Play, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Copy, DownloadCloud, FileSearch, FlaskConical, Play, X } from "lucide-react";
 
+import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
+import type { RuntimeSetupCheckResponse } from "@/types/api";
 
 interface FirstRunWizardProps {
   onAddModel: () => void;
+  onOpenLibrary: () => void;
   onOpenTests: () => void;
   onDismiss: () => void;
 }
 
-export function FirstRunWizard({ onAddModel, onOpenTests, onDismiss }: FirstRunWizardProps) {
+export function FirstRunWizard({ onAddModel, onOpenLibrary, onOpenTests, onDismiss }: FirstRunWizardProps) {
   const labEndpoint = `${window.location.origin.replace(/\/$/, "")}/api/lab/models`;
+  const [runtimeCheck, setRuntimeCheck] = useState<RuntimeSetupCheckResponse | null>(null);
+
+  useEffect(() => {
+    api.getRuntimeSetupCheck().then(setRuntimeCheck).catch(() => setRuntimeCheck(null));
+  }, []);
 
   return (
     <section className="quokka-soft-panel mb-3 rounded-[var(--radius-soft)] px-5 py-4">
@@ -31,11 +40,19 @@ export function FirstRunWizard({ onAddModel, onOpenTests, onDismiss }: FirstRunW
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+      <div className="mt-4 grid gap-3 lg:grid-cols-4">
+        <button type="button" onClick={onOpenLibrary} className="quokka-panel rounded-[var(--radius-control)] p-4 text-left transition hover:border-accent/65">
+          <DownloadCloud className="h-5 w-5 text-accent" />
+          <p className="mt-3 font-semibold text-milk">0. Download GGUF</p>
+          <p className="mt-2 text-sm leading-5 text-milk/50">Search Hugging Face or paste a model URL, then download into Quokka.</p>
+        </button>
         <button type="button" onClick={onAddModel} className="quokka-panel rounded-[var(--radius-control)] p-4 text-left transition hover:border-accent/65">
           <FileSearch className="h-5 w-5 text-accent" />
           <p className="mt-3 font-semibold text-milk">1. Add GGUF</p>
-          <p className="mt-2 text-sm leading-5 text-milk/50">Scan D:\ or paste an exact model path. Windows runtime is the default.</p>
+          <p className="mt-2 text-sm leading-5 text-milk/50">
+            Scan D:\ or pick an exact model path. Windows runtime is the default.
+            {runtimeCheck?.llama_server_candidates.length ? " llama-server.exe was found." : " Pick llama-server.exe if needed."}
+          </p>
         </button>
         <button type="button" onClick={onOpenTests} className="quokka-panel rounded-[var(--radius-control)] p-4 text-left transition hover:border-live/65">
           <FlaskConical className="h-5 w-5 text-live" />

@@ -1,5 +1,5 @@
 param(
-    [string]$Python = "..\backend\.venv\Scripts\python.exe"
+    [string]$Python = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,6 +9,10 @@ $ProjectRoot = Split-Path -Parent $DesktopRoot
 $BackendRoot = Join-Path $ProjectRoot "backend"
 $OutputRoot = Join-Path $DesktopRoot "resources\backend"
 $WorkRoot = Join-Path $DesktopRoot ".pyinstaller"
+
+if ([string]::IsNullOrWhiteSpace($Python)) {
+    $Python = Join-Path $BackendRoot ".venv\Scripts\python.exe"
+}
 
 if (-not (Test-Path $Python)) {
     throw "Python interpreter not found at '$Python'. Create backend\.venv first or pass -Python."

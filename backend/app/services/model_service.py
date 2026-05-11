@@ -45,14 +45,18 @@ from app.schemas.api import (
     ModelDoctorFixRequest,
     ModelDoctorResponse,
     ModelView,
+    RuntimeSetupCheck,
+    RuntimeSetupCheckResponse,
     RuntimeStateResponse,
     RenameModelRequest,
+    TestLaunchResponse,
 )
 from app.schemas.config import AppConfig, LaunchConfig, ModelConfig, ModelSettings, ProfileConfig
 from app.services.config_service import ConfigService
 from app.services.health_service import HealthService
 from app.services.log_service import LogService
 from app.services.metrics_service import MetricsService
+from app.services.model_library_service import validate_gguf_file
 from app.services.process_service import ProcessExitEvent, ProcessService
 from app.utils.command_builder import build_command
 
@@ -98,6 +102,134 @@ class ModelService:
 
     def get_metrics_history(self, minutes: int = 60):
         return self.metrics_service.get_history(minutes)
+
+    def get_runtime_setup_check(self) -> RuntimeSetupCheckResponse:
+        candidates = self._discover_windows_llama_server_candidates()
+        models_dir = self._models_download_dir()
+        checks: list[RuntimeSetupCheck] = [
+            RuntimeSetupCheck(
+                id="models-dir",
+                label="Model download folder",
+                status="pass",
+                detail=str(models_dir),
+            )
+        ]
+
+        path_has_llama = bool(shutil.which("llama-server.exe") or shutil.which("llama-server"))
+        if candidates:
+            checks.append(
+                RuntimeSetupCheck(
+                    id="llama-server",
+                    label="llama-server.exe",
+                    status="pass",
+                    detail=f"Found {len(candidates)} candidate{'s' if len(candidates) != 1 else ''}.",
+                )
+            )
+        else:
+            checks.append(
+                RuntimeSetupCheck(
+                    id="llama-server",
+                    label="llama-server.exe",
+                    status="warn",
+                    detail="Quokka did not find llama-server.exe yet. Add it to PATH or pick it in Add Model.",
+                )
+            )
+
+        return RuntimeSetupCheckResponse(
+            os=sys.platform,
+            models_dir=str(models_dir),
+            llama_server_candidates=candidates,
+            path_has_llama_server=path_has_llama,
+            checks=checks,
+        )
+
+    def test_model_launch(self, payload: CreateModelRequest) -> TestLaunchResponse:
+        checks: list[RuntimeSetupCheck] = []
+        ok = True
+
+        if payload.provider != ProviderType.WINDOWS_LLAMA_CPP:
+            checks.append(
+                RuntimeSetupCheck(
+                    id="runtime",
+                    label="Runtime",
+                    status="info",
+                    detail="Test launch v1 focuses on Windows llama.cpp. WSL models are still validated on Start.",
+                )
+            )
+            return TestLaunchResponse(ok=True, summary="WSL launch will be validated when the model starts.", checks=checks)
+
+        model_path = Path(os.path.expandvars(payload.model_path.strip().strip("\"'"))).expanduser()
+        validation = validate_gguf_file(model_path)
+        checks.append(
+            RuntimeSetupCheck(
+                id="gguf",
+                label="GGUF model",
+                status="pass" if validation.ok else "fail",
+                detail=validation.summary,
+            )
+        )
+        ok = ok and validation.ok
+
+        llama_server_path = payload.llama_server_path or self._detect_windows_llama_server_path()
+        resolved_server = self._resolve_windows_executable(llama_server_path)
+        if resolved_server:
+            checks.append(
+                RuntimeSetupCheck(
+                    id="llama-server",
+                    label="llama-server.exe",
+                    status="pass",
+                    detail=resolved_server,
+                )
+            )
+        else:
+            checks.append(
+                RuntimeSetupCheck(
+                    id="llama-server",
+                    label="llama-server.exe",
+                    status="fail",
+                    detail="llama-server.exe was not found. Pick the executable or install llama.cpp for Windows.",
+                )
+            )
+            ok = False
+
+        if resolved_server:
+            try:
+                result = subprocess.run(
+                    [resolved_server, "--help"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0,
+                    check=False,
+                )
+                checks.append(
+                    RuntimeSetupCheck(
+                        id="llama-help",
+                        label="llama.cpp executable",
+                        status="pass" if result.returncode == 0 else "warn",
+                        detail="Executable responded to --help." if result.returncode == 0 else "Executable exists but --help returned a non-zero exit code.",
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                checks.append(
+                    RuntimeSetupCheck(
+                        id="llama-help",
+                        label="llama.cpp executable",
+                        status="warn",
+                        detail=f"Could not run --help: {exc}",
+                    )
+                )
+
+        checks.append(
+            RuntimeSetupCheck(
+                id="architecture",
+                label="Model architecture",
+                status="info",
+                detail="Architecture support is confirmed on first Start. If llama.cpp cannot load this GGUF, Quokka will show the exact log error.",
+            )
+        )
+        summary = "Launch preflight passed. Quokka can add this Windows llama.cpp model." if ok else "Launch preflight found issues to fix before Start."
+        return TestLaunchResponse(ok=ok, summary=summary, checks=checks, llama_server_path=resolved_server or llama_server_path)
 
     def list_models(self) -> list[ModelView]:
         self.sync_runtime_catalog()
@@ -390,6 +522,10 @@ class ModelService:
     def create_model(self, payload: CreateModelRequest) -> ModelView:
         if payload.provider not in LLAMA_CPP_PROVIDERS:
             raise BadRequestError("Automatic model creation supports local llama.cpp models. Use Ollama/OpenAI-compatible entries from config for external endpoints.")
+        if payload.provider == ProviderType.WINDOWS_LLAMA_CPP:
+            validation = validate_gguf_file(Path(os.path.expandvars(payload.model_path.strip().strip("\"'"))).expanduser())
+            if not validation.ok:
+                raise BadRequestError(validation.summary)
 
         model_id = self._unique_model_id(self._slugify(payload.name))
         endpoint = f"http://{payload.host}:{payload.port}"
@@ -3135,6 +3271,67 @@ class ModelService:
                     continue
         return ports
 
+    def _models_download_dir(self) -> Path:
+        settings_dir = self.config_service._config_path.parent.parent if hasattr(self.config_service, "_config_path") else Path.cwd()
+        data_dir = settings_dir / "data" / "models"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir
+
+    @staticmethod
+    def _resolve_windows_executable(value: str) -> str | None:
+        expanded = os.path.expandvars(value or "").strip().strip("\"'")
+        if not expanded:
+            return None
+        looks_like_path = "\\" in expanded or "/" in expanded or re.match(r"^[A-Za-z]:", expanded)
+        if looks_like_path:
+            path_value = Path(expanded).expanduser()
+            return str(path_value) if path_value.exists() else None
+        found = shutil.which(expanded)
+        return found
+
+    def _discover_windows_llama_server_candidates(self) -> list[str]:
+        candidates: list[str] = []
+        seen: set[str] = set()
+
+        def add(value: str | Path | None) -> None:
+            if not value:
+                return
+            text = str(value).strip().strip("\"'")
+            resolved = self._resolve_windows_executable(text) or text
+            try:
+                path_value = Path(resolved).expanduser()
+                if path_value.exists():
+                    key = str(path_value.resolve()).lower()
+                    if key not in seen:
+                        seen.add(key)
+                        candidates.append(str(path_value))
+            except OSError:
+                return
+
+        add(os.environ.get("LLAMA_SERVER_PATH"))
+        add(shutil.which("llama-server.exe"))
+        add(shutil.which("llama-server"))
+
+        home = Path.home()
+        common = [
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "llama.cpp" / "llama-server.exe",
+            home / "llm" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
+            home / "llm" / "llama.cpp" / "build" / "bin" / "llama-server.exe",
+            home / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
+            home / "llama.cpp" / "build" / "bin" / "llama-server.exe",
+        ]
+        for drive in "CDEFG":
+            common.extend(
+                [
+                    Path(f"{drive}:\\llama.cpp\\build\\bin\\Release\\llama-server.exe"),
+                    Path(f"{drive}:\\llama.cpp\\build\\bin\\llama-server.exe"),
+                    Path(f"{drive}:\\llama\\llama-server.exe"),
+                ]
+            )
+        for candidate in common:
+            add(candidate)
+        return candidates
+
     def _discover_wsl_models(self, distro: str, limit: int) -> list[DiscoveredModelArtifact]:
         roots = "~/llm/models /home/$USER/llm/models /mnt/c/llm/models"
         command = (
@@ -3285,8 +3482,7 @@ class ModelService:
     def _file_name_from_path(path: str) -> str:
         return PureWindowsPath(path).name if "\\" in path or re.match(r"^[A-Za-z]:", path) else PurePosixPath(path).name
 
-    @staticmethod
-    def _detect_windows_llama_server_path() -> str:
+    def _detect_windows_llama_server_path(self) -> str:
         env_path = os.environ.get("LLAMA_SERVER_PATH", "").strip().strip("\"'")
         if env_path:
             return env_path
@@ -3296,20 +3492,9 @@ class ModelService:
             if found:
                 return found
 
-        home = Path.home()
-        candidates = [
-            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "llama.cpp" / "llama-server.exe",
-            home / "llm" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
-            home / "llm" / "llama.cpp" / "build" / "bin" / "llama-server.exe",
-            home / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
-            home / "llama.cpp" / "build" / "bin" / "llama-server.exe",
-        ]
-        for candidate in candidates:
-            try:
-                if candidate.exists():
-                    return str(candidate)
-            except OSError:
-                continue
+        candidates = self._discover_windows_llama_server_candidates()
+        if candidates:
+            return candidates[0]
         return "llama-server.exe"
 
     def _extract_artifact_info(self, model: ModelConfig) -> ModelArtifactInfo:

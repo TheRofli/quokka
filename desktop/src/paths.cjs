@@ -28,6 +28,21 @@ function frontendDistDir() {
 }
 
 function configPath() {
+  if (app.isPackaged) {
+    const dir = path.join(app.getPath("userData"), "config");
+    const target = path.join(dir, "quokka.yaml");
+    fs.mkdirSync(dir, { recursive: true });
+    if (!exists(target)) {
+      const example = path.join(backendDir(), "config", "quokka.example.yaml");
+      const bundled = path.join(backendDir(), "config", "quokka.yaml");
+      if (exists(example)) {
+        fs.copyFileSync(example, target);
+      } else if (exists(bundled)) {
+        fs.copyFileSync(bundled, target);
+      }
+    }
+    return target;
+  }
   return path.join(backendDir(), "config", "quokka.yaml");
 }
 
