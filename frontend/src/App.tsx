@@ -199,7 +199,7 @@ function App() {
                 ))}
               </nav>
               <div className="mt-auto border-t border-line/70 px-2 pt-4 text-xs leading-5 text-milk/42">
-                <p>{config?.app_name ?? "Quokka"} v{config?.version ?? "0.1.0"}</p>
+                <p>{config?.app_name ?? "Quokka"} v{updateStatus?.current_version?.split("+")[0] ?? config?.version ?? "0.2.0"}</p>
                 <p>Last refresh</p>
                 <p>{metrics ? formatTimestamp(metrics.timestamp) : "Pending"}</p>
               </div>
@@ -312,75 +312,111 @@ function App() {
         ) : null}
 
         {mode === "settings" ? (
-          <main className="mt-4 min-h-[520px] rounded-lg border border-line bg-white/[0.025] px-5 py-5">
-            <div className="max-w-5xl">
-              <p className="text-xs uppercase tracking-[0.24em] text-accent">Settings</p>
-              <h1 className="mt-2 text-2xl font-semibold text-milk">Theme Studio</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-milk/52">
-                Pick a local interface theme. It is saved on this machine and applies immediately without restarting Quokka.
-              </p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {themes.map((theme) => (
-                  <button
-                    key={theme.id}
-                    type="button"
-                    title={theme.description}
-                    onClick={() => setThemeId(theme.id)}
-                    className={`rounded-lg border px-4 py-4 text-left transition-colors ${
-                      themeId === theme.id
-                        ? "border-accent bg-accent/12 text-milk"
-                        : "border-line bg-white/[0.03] text-milk/68 hover:border-accent/35 hover:bg-white/[0.055]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-milk">{theme.name}</p>
-                        <p className="mt-2 text-sm leading-5 text-milk/48">{theme.description}</p>
+          <main className="mt-4 grid min-h-0 flex-1 overflow-hidden rounded-[var(--radius-soft)] border border-line bg-panel/55 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <section className="min-h-0 overflow-y-auto px-5 py-5">
+              <div className="max-w-6xl">
+                <p className="text-xs uppercase tracking-[0.24em] text-accent">Settings</p>
+                <h1 className="mt-2 text-2xl font-semibold text-milk">Theme Studio</h1>
+                <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
+                  Pick a local interface theme. It is saved on this machine and applies immediately without restarting Quokka.
+                </p>
+                <div className="mt-5 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                  {themes.map((theme) => (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      title={theme.description}
+                      onClick={() => setThemeId(theme.id)}
+                      className={`min-h-[104px] rounded-[var(--radius-control)] border px-4 py-4 text-left transition-colors ${
+                        themeId === theme.id
+                          ? "border-accent bg-accent/12 text-milk"
+                          : "border-line bg-shell/42 text-milk/68 hover:border-accent/35 hover:bg-white/[0.055]"
+                      }`}
+                    >
+                      <div className="flex h-full items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-milk">{theme.name}</p>
+                          <p className="mt-2 text-sm leading-5 text-milk/48">{theme.description}</p>
+                        </div>
+                        <span className={themeId === theme.id ? "text-accent" : "text-milk/25"}>{themeId === theme.id ? "active" : "preview"}</span>
                       </div>
-                      <span className={themeId === theme.id ? "text-accent" : "text-milk/25"}>{themeId === theme.id ? "active" : "preview"}</span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-8">
+                  <p className="text-xs uppercase tracking-[0.24em] text-accent">Control Surface</p>
+                  <h2 className="mt-2 text-xl font-semibold text-milk">Upcoming Settings</h2>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+                    {settingsSections.map((section) => (
+                      <div
+                        key={section.title}
+                        className="rounded-[var(--radius-control)] border border-line bg-shell/38 px-4 py-4"
+                        title={section.body}
+                      >
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-milk/35">{section.eyebrow}</p>
+                        <p className="mt-2 font-semibold text-milk">{section.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-milk/48">{section.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <aside className="min-h-0 overflow-y-auto border-t border-line/70 bg-shell/35 px-5 py-5 xl:border-l xl:border-t-0">
+              <div className="rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-accent">Update Center</p>
+                <h2 className="mt-2 text-xl font-semibold text-milk">Quokka {updateStatus?.current_version?.split("+")[0] ?? "0.2.0"}</h2>
+                <p className="mt-2 text-sm leading-6 text-milk/52">{updateStatus?.message ?? "Checking for updates..."}</p>
+                <div className="mt-4 grid gap-2 text-sm text-milk/55">
+                  <span>Install type: {updateStatus?.source_install ? "GitHub source" : "Desktop installer"}</span>
+                  <span>Latest: {updateStatus?.latest_version ?? "--"}</span>
+                  <span>Checked: {updateStatus ? formatTimestamp(updateStatus.checked_at) : "Pending"}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void runUpdate()}
+                  className="quokka-control mt-4 w-full px-3 py-2 text-sm font-semibold text-live hover:border-live/60"
+                >
+                  {updateStatus?.update_available ? "Update Quokka" : "Check update path"}
+                </button>
               </div>
 
-              <div className="mt-8 rounded-lg border border-line bg-surface/55 px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.24em] text-accent">Install & Update</p>
-                <h2 className="mt-2 text-xl font-semibold text-milk">Friend-friendly terminal flow</h2>
-                <p className="mt-2 max-w-3xl text-sm leading-6 text-milk/52">
-                  Install once, run Quokka with `quokka`, update with `quokka update`, and let Quokka Lab discover running models through `/api/lab/models`.
+              <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-accent">Install Commands</p>
+                <p className="mt-2 text-sm leading-6 text-milk/52">
+                  Source installs update fastest. Desktop installer updates require a GitHub Release asset.
                 </p>
-                <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                <div className="mt-4 space-y-3">
                   {[
-                    { label: "Install", command: "git clone https://github.com/TheRofli/Quokka.git && cd Quokka && .\\install-quokka.ps1" },
+                    { label: "Install", command: "irm https://raw.githubusercontent.com/TheRofli/Quokka/main/install.ps1 | iex" },
                     { label: "Open", command: "quokka" },
                     { label: "Update", command: "quokka update" },
                   ].map((item) => (
-                    <div key={item.label} className="rounded-lg border border-line/70 bg-shell/40 px-3 py-3">
+                    <div key={item.label} className="rounded-[var(--radius-control)] border border-line/70 bg-panel/42 px-3 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/38">{item.label}</p>
-                      <code className="mt-2 block break-all font-mono text-sm text-milk/70">{item.command}</code>
+                      <code className="mt-2 block break-all font-mono text-xs leading-5 text-milk/70">{item.command}</code>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="mt-8">
-                <p className="text-xs uppercase tracking-[0.24em] text-accent">Control Surface</p>
-                <h2 className="mt-2 text-xl font-semibold text-milk">Upcoming Settings</h2>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {settingsSections.map((section) => (
-                    <div
-                      key={section.title}
-                      className="rounded-lg border border-line bg-white/[0.025] px-4 py-4"
-                      title={section.body}
-                    >
-                      <p className="text-[11px] uppercase tracking-[0.2em] text-milk/35">{section.eyebrow}</p>
-                      <p className="mt-2 font-semibold text-milk">{section.title}</p>
-                      <p className="mt-2 text-sm leading-6 text-milk/48">{section.body}</p>
-                    </div>
-                  ))}
+              <div className="mt-4 rounded-[var(--radius-control)] border border-line/70 bg-shell/45 px-4 py-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-accent">Windows Runtime</p>
+                <p className="mt-2 text-sm leading-6 text-milk/52">
+                  GGUF + Windows llama.cpp is the default path. Use Model Library to download, then Add Model to preflight.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setMode("library")} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
+                    Open Library
+                  </button>
+                  <button type="button" onClick={() => setAddModelOpen(true)} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
+                    Add Model
+                  </button>
                 </div>
               </div>
-            </div>
+            </aside>
           </main>
         ) : null}
 
