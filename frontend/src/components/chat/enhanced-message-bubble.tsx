@@ -74,7 +74,7 @@ export function MarkdownText({ content }: { content: string }) {
 
 function formatThoughtTime(ms?: number | null) {
   if (!ms || !Number.isFinite(ms)) {
-    return "Thought";
+    return "Assistant";
   }
   if (ms < 1000) {
     return `Thought for ${(ms / 1000).toFixed(1)}s`;
@@ -99,10 +99,10 @@ export function EnhancedMessageBubble({ message }: EnhancedMessageBubbleProps) {
       "animate-in slide-in-from-bottom-2 duration-200"
     )}>
       <div className={cn(
-        "max-w-[min(860px,100%)] transition-all",
+        "transition-all",
         isUser 
-          ? "ml-auto rounded-[24px] bg-milk/10 px-4 py-3 text-left text-milk/88 shadow-[inset_0_0_0_1px_rgb(var(--color-line)/0.42)]" 
-          : "w-full"
+          ? "ml-auto max-w-[min(760px,82%)] rounded-[24px] bg-milk/9 px-4 py-3 text-left text-milk/88 shadow-[inset_0_0_0_1px_rgb(var(--color-line)/0.32)]"
+          : "w-full max-w-[min(860px,100%)]"
       )}>
         {isUser ? null : (
           <div className="mb-2 flex items-center gap-2 text-xs text-milk/42">

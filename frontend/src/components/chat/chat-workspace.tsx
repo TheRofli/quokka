@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Bot,
   BrainCircuit,
-  ChevronDown,
   Download,
   FileText,
   Image,
@@ -197,24 +195,6 @@ function ContextRing({ usedTokens, contextSize }: { usedTokens: number; contextS
   );
 }
 
-function ThinkingBlock({ content, tokens }: { content: string; tokens?: number | null }) {
-  return (
-    <details className="group mb-3 rounded-lg border border-line/80 bg-black/15 px-3 py-2" open>
-      <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium text-milk/70">
-        <span className="grid h-6 w-6 place-items-center rounded-full border border-line bg-white/[0.035] text-accent">
-          <BrainCircuit className="h-3.5 w-3.5" />
-        </span>
-        <span>Думаю...</span>
-        {tokens ? <span className="text-xs text-milk/35">{tokens} tokens</span> : null}
-        <ChevronDown className="ml-auto h-4 w-4 text-milk/35 transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="mt-3 border-l border-line pl-4 text-sm leading-6 text-milk/55">
-        <p className="whitespace-pre-wrap">{content}</p>
-      </div>
-    </details>
-  );
-}
-
 function splitStreamingReasoning(raw: string) {
   const lower = raw.toLowerCase();
   const start = lower.indexOf("<think>");
@@ -239,58 +219,6 @@ function estimateThinkingTokens(text: string) {
   return text.trim() ? Math.max(1, Math.round(text.trim().split(/\s+/).length * 1.35)) : 0;
 }
 
-function LegacyLiveAssistantBubble({
-  answer,
-  thinking,
-  showThinking,
-  onShowThinkingChange,
-}: {
-  answer: string;
-  thinking: string;
-  showThinking: boolean;
-  onShowThinkingChange: (value: boolean) => void;
-}) {
-  const thinkingTokens = estimateThinkingTokens(thinking);
-  return (
-    <div className="flex justify-start">
-      <div className="max-w-[min(1120px,92%)] rounded-lg border border-line bg-white/[0.035] px-5 py-4 shadow-glow">
-        <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.16em] text-milk/35">
-          <Bot className="h-3.5 w-3.5" />
-          assistant
-          <span className="ml-auto inline-flex items-center gap-1.5 normal-case tracking-normal text-milk/45">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
-            <span className="h-2 w-2 animate-pulse rounded-full bg-accent/70 [animation-delay:160ms]" />
-            <span className="h-2 w-2 animate-pulse rounded-full bg-accent/45 [animation-delay:320ms]" />
-          </span>
-        </div>
-        <div className="rounded-lg border border-line/80 bg-black/15 px-3 py-2">
-          <label className="flex cursor-pointer select-none items-center gap-2 text-sm font-medium text-milk/70">
-            <input
-              type="checkbox"
-              checked={showThinking}
-              onChange={(event) => onShowThinkingChange(event.target.checked)}
-              className="h-3.5 w-3.5 accent-[rgb(var(--color-accent))]"
-            />
-            <BrainCircuit className="h-4 w-4 text-accent" />
-            Думаю сейчас
-            {thinkingTokens ? <span className="text-xs text-milk/35">{thinkingTokens} tokens</span> : null}
-          </label>
-          {showThinking ? (
-            <div className="mt-3 max-h-56 overflow-y-auto border-l border-line pl-4 text-sm leading-6 text-milk/55">
-              <p className="whitespace-pre-wrap">{thinking || "Жду reasoning-чанки от локальной модели..."} </p>
-            </div>
-          ) : null}
-        </div>
-        {answer ? (
-          <div className="mt-3">
-            <MarkdownText content={answer} />
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 function LiveAssistantBubble({
   answer,
   thinking,
@@ -307,19 +235,19 @@ function LiveAssistantBubble({
     <div className="w-full">
       <div className="max-w-[min(860px,100%)]">
         <div className="mb-2 flex items-center gap-2 text-xs font-medium text-milk/44">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-          thinking
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-live" />
+          generating
           {thinkingTokens ? <span>{thinkingTokens} tokens</span> : null}
           <button
             type="button"
             onClick={() => onShowThinkingChange(!showThinking)}
-            className="ml-2 rounded-full border border-line/45 px-2 py-0.5 text-[11px] text-milk/48 hover:text-milk"
+            className="ml-2 rounded-full border border-line/45 px-2 py-0.5 text-[11px] text-milk/48 transition hover:border-accent/45 hover:text-milk"
           >
             {showThinking ? "Hide" : "Show"}
           </button>
         </div>
         {showThinking ? (
-          <div className="mb-3 max-h-48 overflow-y-auto border-l border-accent/35 pl-4 text-sm leading-6 text-milk/50">
+          <div className="mb-3 max-h-48 overflow-y-auto border-l border-accent/35 bg-panel/18 py-1 pl-4 text-sm leading-6 text-milk/50">
             <p className="whitespace-pre-wrap">
               {thinking || "Waiting for reasoning chunks from the local model..."}
             </p>
@@ -763,7 +691,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
 
   return (
     <main className="flex h-full min-h-0 flex-1 overflow-hidden bg-transparent text-milk">
-      <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_34%,rgb(var(--color-accent)/0.075),transparent_30%),linear-gradient(180deg,rgb(var(--color-shell)/0.78),rgb(var(--color-surface)/0.72))]">
+      <section className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_22%,rgb(var(--color-accent)/0.055),transparent_28%),linear-gradient(180deg,rgb(var(--color-shell)/0.82),rgb(var(--color-surface)/0.68))]">
         {!chatSidebarOpen ? (
           <button
             type="button"
@@ -774,7 +702,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
             <PanelRightOpen className="h-4 w-4" />
           </button>
         ) : null}
-        <header className="flex min-h-[58px] items-center justify-between gap-4 border-b border-line/38 px-5 py-2">
+        <header className="flex min-h-[64px] items-center justify-between gap-4 border-b border-line/35 bg-shell/35 px-5 py-2">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="grid h-8 w-8 place-items-center rounded-full bg-accent/14 text-accent">
@@ -788,11 +716,17 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
           </div>
 
           <div className="hidden items-center gap-2 lg:flex">
-            <div className="quokka-pill px-3 py-2 text-xs text-milk/52">
-              {activeSession?.messages.length ?? 0} messages / {attachments.length} files
+            <div className="quokka-pill px-3 py-2 font-mono text-xs text-milk/58">
+              tok/s <span className="text-milk">{formatCompactNumber(liveTokensPerSecond, 1)}</span>
             </div>
-            <div className="quokka-pill px-3 py-2 text-xs text-milk/52">
-              ctx {contextPercent.toFixed(1)}%
+            <div className="quokka-pill px-3 py-2 font-mono text-xs text-milk/58">
+              ctx <span className="text-milk">{contextPercent.toFixed(1)}%</span>
+            </div>
+            <div className="quokka-pill px-3 py-2 font-mono text-xs text-milk/58">
+              vram <span className="text-milk">{vramDisplay}</span>
+            </div>
+            <div className="quokka-pill px-3 py-2 font-mono text-xs text-milk/58">
+              {activeSession?.messages.length ?? 0} msg / {attachments.length} files
             </div>
             {!chatSidebarOpen ? (
               <Button
@@ -865,19 +799,17 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                     </button>
                   ))}
                 </div>
-                <div className="mt-7 grid w-full max-w-3xl gap-3 text-left md:grid-cols-3">
-                  <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
-                    <p className="text-sm font-semibold text-milk">Ask the model</p>
-                    <p className="mt-2 text-sm leading-5 text-milk/50">Use instant mode for short answers or thinking mode for deeper reasoning.</p>
-                  </div>
-                  <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
-                    <p className="text-sm font-semibold text-milk">Attach context</p>
-                    <p className="mt-2 text-sm leading-5 text-milk/50">Send config snippets, logs, docs, or images to your local endpoint.</p>
-                  </div>
-                  <div className="quokka-soft-panel rounded-[var(--radius-soft)] p-4">
-                    <p className="text-sm font-semibold text-milk">Tune later</p>
-                    <p className="mt-2 text-sm leading-5 text-milk/50">Move to LLM Tests when you need ctx, batch, KV cache, and throughput sweeps.</p>
-                  </div>
+                <div className="mt-7 grid w-full max-w-3xl gap-2 text-left md:grid-cols-3">
+                  {[
+                    ["Runtime-aware", "Quokka keeps model status, ctx, and VRAM nearby."],
+                    ["Quiet by default", "Instant answers first, thinking details only when you ask."],
+                    ["Local context", "Attach logs, configs, snippets, or images when needed."],
+                  ].map(([title, body]) => (
+                    <div key={title} className="rounded-2xl border border-line/40 bg-panel/28 px-4 py-3">
+                      <p className="text-sm font-semibold text-milk">{title}</p>
+                      <p className="mt-1 text-xs leading-5 text-milk/45">{body}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : null}
@@ -898,8 +830,8 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
             </div>
           </div>
 
-          <div className="border-t border-line/45 bg-shell/68 px-4 py-4 backdrop-blur md:px-8">
-            <div className="mx-auto w-full max-w-5xl">
+          <div className="border-t border-line/35 bg-shell/78 px-4 py-4 backdrop-blur md:px-8">
+            <div className="mx-auto w-full max-w-[860px]">
               {error ? (
                 <div className="mb-3 flex items-start gap-2 rounded-2xl border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
                   <X className="mt-0.5 h-4 w-4 shrink-0" />
@@ -930,7 +862,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                 </div>
               ) : null}
 
-              <div className="rounded-[28px] border border-line/60 bg-panel-2/82 p-3 shadow-glow">
+              <div className="rounded-[26px] border border-line/50 bg-panel-2/72 p-3 shadow-[0_18px_60px_rgba(0,0,0,0.26)]">
                 <Textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
@@ -942,13 +874,35 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                   }}
                   placeholder={selectedModelReady ? `Message ${selectedModel?.name || "Quokka local model"}...` : "Start a model in Local Panel before chatting..."}
                   disabled={!selectedModelReady}
-                  className="min-h-[94px] resize-none border-0 bg-transparent px-2 py-2 text-base text-milk shadow-none outline-none placeholder:text-milk/34 focus-visible:ring-0"
+                  className="min-h-[104px] resize-none border-0 bg-transparent px-3 py-3 text-base leading-7 text-milk shadow-none outline-none placeholder:text-milk/34 focus-visible:ring-0"
                 />
 
-                <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/35 pt-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <div className="inline-flex rounded-full border border-line/55 bg-shell/42 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setThinkingMode("instant")}
+                        className={cn(
+                          "rounded-full px-3 py-1.5 text-xs font-semibold transition",
+                          thinkingMode === "instant" ? "bg-accent/18 text-accent" : "text-milk/50 hover:text-milk"
+                        )}
+                      >
+                        Instant
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setThinkingMode("thinking")}
+                        className={cn(
+                          "rounded-full px-3 py-1.5 text-xs font-semibold transition",
+                          thinkingMode === "thinking" ? "bg-accent/18 text-accent" : "text-milk/50 hover:text-milk"
+                        )}
+                      >
+                        Think
+                      </button>
+                    </div>
                     <select
-                      className="h-9 max-w-[240px] rounded-full border border-line/60 bg-panel px-3 text-sm text-milk outline-none focus:border-accent/70"
+                      className="h-9 max-w-[260px] rounded-full border border-line/55 bg-shell/48 px-3 text-sm text-milk outline-none focus:border-accent/70"
                       value={selectedModel?.id ?? ""}
                       onChange={(event) => {
                         if (activeSession) {
@@ -963,54 +917,19 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                         </option>
                       ))}
                     </select>
-                    
-                    {/* Web Search Toggle */}
-                    <div className="flex items-center gap-2 rounded-full border border-line/60 bg-panel px-3 py-2">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={enableWebSearch}
-                          onChange={(event) => setEnableWebSearch(event.target.checked)}
-                          className="h-4 w-4 accent-[rgb(var(--color-accent))]"
-                        />
-                        <Zap className="h-4 w-4 text-accent" />
-                        <span className="text-sm text-milk/70">Web Search</span>
-                      </label>
-                      
-                      {enableWebSearch && (
-                        <>
-                          <select
-                            className="h-8 rounded-full border border-line/60 bg-[#191815] px-2 text-xs text-milk outline-none focus:border-accent/60"
-                            value={webSearchProvider}
-                            onChange={(event) => setWebSearchProvider(event.target.value as "duckduckgo" | "tavily")}
-                          >
-                            <option value="duckduckgo" className="bg-panel">DuckDuckGo</option>
-                            <option value="tavily" className="bg-panel">Tavily</option>
-                          </select>
-                          
-                          <select
-                            className="h-8 rounded-full border border-line/60 bg-[#191815] px-2 text-xs text-milk outline-none focus:border-accent/60"
-                            value={webSearchResults}
-                            onChange={(event) => setWebSearchResults(parseInt(event.target.value))}
-                          >
-                            {[1, 2, 3, 4, 5].map(num => (
-                              <option key={num} value={num} className="bg-panel">{num} results</option>
-                            ))}
-                          </select>
-                        </>
-                      )}
-                    </div>
-                    
+
                     <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => void onFiles(event.target.files)} />
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => fileInputRef.current?.click()}
-                      className="h-9 rounded-full border border-line/60 px-3 text-milk/60 hover:bg-milk/8 hover:text-milk"
+                      className="h-9 rounded-full border border-line/55 px-3 text-milk/60 hover:bg-milk/8 hover:text-milk"
+                      title="Attach files"
                     >
                       <Paperclip className="h-4 w-4" />
                     </Button>
+                    <ContextRing usedTokens={usedTokens} contextSize={contextSize} />
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1040,7 +959,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                       <Button
                         variant="primary"
                         size="sm"
-                      disabled={!selectedModelReady}
+                        disabled={!selectedModelReady}
                         onClick={() => void send()}
                         className="h-10 rounded-full bg-accent px-4 text-black hover:bg-accent/90"
                       >
@@ -1057,7 +976,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
         </div>
       </section>
       {chatSidebarOpen ? (
-        <aside className="hidden w-[326px] shrink-0 flex-col border-l border-line/55 bg-panel/68 md:flex">
+        <aside className="hidden w-[326px] shrink-0 flex-col border-l border-line/45 bg-surface/82 md:flex">
           <div className="px-5 pb-4 pt-5">
             <div className="flex items-center justify-between">
               <div>
@@ -1140,8 +1059,8 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
             ))}
           </div>
 
-          <div className="border-t border-line/55 p-4">
-            <div className="rounded-3xl border border-line/55 bg-shell/32 p-3">
+          <div className="border-t border-line/45 p-4">
+            <div className="rounded-2xl border border-line/45 bg-shell/28 p-3">
               <div className="flex items-center gap-2">
                 <span className={cn("h-2.5 w-2.5 rounded-full", selectedModel?.runtime.status === "running" ? "bg-success" : "bg-warning")} />
                 <p className="min-w-0 flex-1 truncate text-sm font-semibold text-milk">{selectedModel?.name ?? "No model selected"}</p>
@@ -1157,7 +1076,7 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
               </div>
             </div>
 
-            <div className="mt-3 rounded-3xl border border-line/55 bg-shell/32 p-3">
+            <div className="mt-3 rounded-2xl border border-line/45 bg-shell/28 p-3">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-milk/38">Prompt controls</p>
                 <ContextRing usedTokens={usedTokens} contextSize={contextSize} />
@@ -1225,6 +1144,46 @@ export function ChatWorkspace({ models }: ChatWorkspaceProps) {
                 <span>RAM: {ramDisplay}</span>
                 <span>Session: {formatCompactNumber(activeSessionTokens)} tokens</span>
               </div>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-line/45 bg-shell/28 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-milk/38">Web search</p>
+                  <p className="mt-1 text-xs text-milk/38">Optional retrieval before the local model answers.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEnableWebSearch((value) => !value)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                    enableWebSearch ? "border-live/45 bg-live/12 text-live" : "border-line/55 text-milk/45 hover:text-milk"
+                  )}
+                >
+                  {enableWebSearch ? "On" : "Off"}
+                </button>
+              </div>
+              {enableWebSearch ? (
+                <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                  <select
+                    className="h-9 rounded-full border border-line/60 bg-panel px-3 text-xs text-milk outline-none focus:border-accent/70"
+                    value={webSearchProvider}
+                    onChange={(event) => setWebSearchProvider(event.target.value as "duckduckgo" | "tavily")}
+                  >
+                    <option value="duckduckgo" className="bg-panel">DuckDuckGo</option>
+                    <option value="tavily" className="bg-panel">Tavily</option>
+                  </select>
+                  <select
+                    className="h-9 rounded-full border border-line/60 bg-panel px-3 text-xs text-milk outline-none focus:border-accent/70"
+                    value={webSearchResults}
+                    onChange={(event) => setWebSearchResults(parseInt(event.target.value, 10))}
+                  >
+                    {[1, 2, 3, 4, 5].map((num) => (
+                      <option key={num} value={num} className="bg-panel">{num}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </div>
           </div>
         </aside>
