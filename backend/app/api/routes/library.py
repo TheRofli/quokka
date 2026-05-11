@@ -160,7 +160,7 @@ def _entry_from_hf_model(payload: dict) -> ModelLibraryEntry:
         tags=[str(item) for item in payload.get("tags", [])[:8]] if isinstance(payload.get("tags"), list) else [],
         likes=payload.get("likes") if isinstance(payload.get("likes"), int) else None,
         downloads=payload.get("downloads") if isinstance(payload.get("downloads"), int) else None,
-        files=files[:8],
+        files=files[:16],
     )
 
 
@@ -173,7 +173,7 @@ def featured_models() -> list[ModelLibraryEntry]:
 def search_models(query: str = Query(default="gemma gguf", min_length=1, max_length=120)) -> ModelLibrarySearchResponse:
     entries: list[ModelLibraryEntry] = []
     with httpx.Client(timeout=8.0, follow_redirects=True) as client:
-        response = client.get("https://huggingface.co/api/models", params={"search": query, "limit": 12, "full": "true"})
+        response = client.get("https://huggingface.co/api/models", params={"search": query, "limit": 30, "full": "true"})
         response.raise_for_status()
         payload = response.json()
     for item in payload if isinstance(payload, list) else []:
