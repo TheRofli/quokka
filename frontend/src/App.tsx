@@ -10,7 +10,7 @@ import { RuntimeErrorBoundary } from "@/components/runtime-error-boundary";
 import { api } from "@/api/client";
 import { useQuokkaDashboard } from "@/hooks/use-quokka-dashboard";
 import { formatTimestamp } from "@/lib/utils";
-import type { AppUpdateResponse } from "@/types/api";
+import type { AppUpdateResponse, LlamaCppRuntimeStatus } from "@/types/api";
 
 const ChatWorkspace = lazy(() => import("@/components/chat/chat-workspace").then((module) => ({ default: module.ChatWorkspace })));
 const BenchmarkDialog = lazy(() => import("@/components/dashboard/benchmark-dialog").then((module) => ({ default: module.BenchmarkDialog })));
@@ -82,6 +82,7 @@ function App() {
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId | null>(null);
   const [updateStatus, setUpdateStatus] = useState<AppUpdateResponse | null>(null);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [llamaRuntime, setLlamaRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
   const {
     metrics,
     metricHistory,
@@ -123,6 +124,34 @@ function App() {
     api.getUpdateStatus().then(setUpdateStatus).catch(() => setUpdateStatus(null));
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      api
+        .getLlamaCppRuntimeStatus()
+        .then((status) => {
+          if (active) {
+            setLlamaRuntime(status);
+          }
+        })
+        .catch(() => {
+          if (active) {
+            setLlamaRuntime(null);
+          }
+        });
+    };
+    refresh();
+    const interval = window.setInterval(() => {
+      if (llamaRuntime?.status === "queued" || llamaRuntime?.status === "downloading" || llamaRuntime?.status === "extracting") {
+        refresh();
+      }
+    }, 1500);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [llamaRuntime?.status]);
+
   const dismissFirstRun = () => {
     setFirstRunDismissed(true);
     window.localStorage.setItem("quokka.firstRun.dismissed", "1");
@@ -130,7 +159,10 @@ function App() {
 
   const runUpdate = async () => {
     if (window.quokkaDesktop?.runUpdate) {
-      const result = await window.quokkaDesktop.runUpdate();
+      const result = await window.quokkaDesktop.runUpdate({
+        installerUrl: updateStatus?.installer_url,
+        releaseUrl: updateStatus?.release_url,
+      });
       setUpdateMessage(result.message);
       return;
     }
@@ -142,6 +174,13 @@ function App() {
     await navigator.clipboard.writeText("quokka update");
     setUpdateMessage("Copied: quokka update");
   };
+
+  const installLlamaCpp = async (variant: "cpu" | "cuda") => {
+    const status = await api.installLlamaCppRuntime({ variant });
+    setLlamaRuntime(status);
+  };
+
+  const llamaRuntimeBusy = llamaRuntime?.status === "queued" || llamaRuntime?.status === "downloading" || llamaRuntime?.status === "extracting";
 
   return (
     <div className="h-screen overflow-hidden bg-shell text-milk">
@@ -407,7 +446,38 @@ function App() {
                 <p className="mt-2 text-sm leading-6 text-milk/52">
                   GGUF + Windows llama.cpp is the default path. Use Model Library to download, then Add Model to preflight.
                 </p>
+                <div className="mt-4 rounded-[var(--radius-control)] border border-line/60 bg-panel/42 px-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-milk">llama.cpp</p>
+                    <span className="quokka-pill px-2 py-1 text-xs text-milk/55">{llamaRuntime?.status ?? "checking"}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-5 text-milk/50">
+                    {llamaRuntime?.error ?? llamaRuntime?.message ?? "Checking local runtime..."}
+                  </p>
+                  {llamaRuntimeBusy ? (
+                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                      <div className="h-full rounded-full bg-live" style={{ width: `${Math.max(3, llamaRuntime?.progress_percent ?? 0)}%` }} />
+                    </div>
+                  ) : null}
+                  {llamaRuntime?.llama_server_path ? <p className="mt-2 break-all font-mono text-[11px] leading-5 text-live/70">{llamaRuntime.llama_server_path}</p> : null}
+                </div>
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void installLlamaCpp("cpu")}
+                    disabled={llamaRuntimeBusy}
+                    className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Install CPU
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void installLlamaCpp("cuda")}
+                    disabled={llamaRuntimeBusy}
+                    className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-live disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    Install CUDA
+                  </button>
                   <button type="button" onClick={() => setMode("library")} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
                     Open Library
                   </button>

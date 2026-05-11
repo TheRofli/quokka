@@ -106,10 +106,17 @@ function registerIpcHandlers() {
     return true;
   });
 
-  ipcMain.handle("quokka:run-update", async () => {
+  ipcMain.handle("quokka:run-update", async (_event, payload = {}) => {
     const updater = path.join(app.getPath("localappdata"), "Quokka", "bin", "quokka-update.cmd");
     if (!fs.existsSync(updater)) {
-      return { ok: false, message: "quokka-update.cmd was not found. Re-run the GitHub installer once." };
+      const installerUrl = typeof payload.installerUrl === "string" ? payload.installerUrl : "";
+      const releaseUrl = typeof payload.releaseUrl === "string" ? payload.releaseUrl : "";
+      const fallbackUrl = /^https?:\/\//i.test(installerUrl) ? installerUrl : /^https?:\/\//i.test(releaseUrl) ? releaseUrl : "";
+      if (fallbackUrl) {
+        await shell.openExternal(fallbackUrl);
+        return { ok: true, message: "Opened the latest Quokka installer in your browser." };
+      }
+      return { ok: false, message: "No source updater or installer URL was available." };
     }
     childProcess.spawn("cmd.exe", ["/c", "start", "", updater, "-Launch"], {
       detached: true,

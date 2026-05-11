@@ -172,6 +172,23 @@ export interface AppUpdateResponse {
   message: string;
 }
 
+export interface LlamaCppInstallRequest {
+  variant?: "cpu" | "cuda";
+  force?: boolean;
+}
+
+export interface LlamaCppRuntimeStatus {
+  status: "idle" | "queued" | "downloading" | "extracting" | "installed" | "failed";
+  variant: "cpu" | "cuda";
+  version?: string | null;
+  install_dir?: string | null;
+  llama_server_path?: string | null;
+  progress_percent: number;
+  message: string;
+  error?: string | null;
+  updated_at: string;
+}
+
 export interface ModelDoctorCheck {
   id: string;
   label: string;

@@ -7,5 +7,5 @@ contextBridge.exposeInMainWorld("quokkaDesktop", {
   openFile: (options) => ipcRenderer.invoke("quokka:open-file", options),
   openFolder: (options) => ipcRenderer.invoke("quokka:open-folder", options),
   openExternal: (url) => ipcRenderer.invoke("quokka:open-external", url),
-  runUpdate: () => ipcRenderer.invoke("quokka:run-update"),
+  runUpdate: (payload) => ipcRenderer.invoke("quokka:run-update", payload),
 });

@@ -5,7 +5,7 @@ import { api } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, formatNumber } from "@/lib/utils";
-import type { CreateModelRequest, DiscoveredModelArtifact, ModelView, RuntimeSetupCheckResponse, TestLaunchResponse } from "@/types/api";
+import type { CreateModelRequest, DiscoveredModelArtifact, LlamaCppRuntimeStatus, ModelView, RuntimeSetupCheckResponse, TestLaunchResponse } from "@/types/api";
 
 interface AddModelDialogProps {
   open: boolean;
@@ -121,6 +121,7 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [runtimeCheck, setRuntimeCheck] = useState<RuntimeSetupCheckResponse | null>(null);
+  const [llamaRuntime, setLlamaRuntime] = useState<LlamaCppRuntimeStatus | null>(null);
   const [testLaunch, setTestLaunch] = useState<TestLaunchResponse | null>(null);
   const [isTestingLaunch, setIsTestingLaunch] = useState(false);
   const [step, setStep] = useState<WizardStep>("source");
@@ -149,9 +150,36 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
           }
         })
         .catch(() => setRuntimeCheck(null));
+      api
+        .getLlamaCppRuntimeStatus()
+        .then((status) => {
+          setLlamaRuntime(status);
+          if (status.llama_server_path) {
+            setDraft((current) => ({ ...current, llama_server_path: current.llama_server_path || status.llama_server_path }));
+          }
+        })
+        .catch(() => setLlamaRuntime(null));
     }
     wasOpenRef.current = open;
   }, [models, open]);
+
+  useEffect(() => {
+    if (!open || !llamaRuntime || !["queued", "downloading", "extracting"].includes(llamaRuntime.status)) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      api
+        .getLlamaCppRuntimeStatus()
+        .then((status) => {
+          setLlamaRuntime(status);
+          if (status.llama_server_path) {
+            setDraft((current) => ({ ...current, llama_server_path: current.llama_server_path || status.llama_server_path }));
+          }
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(interval);
+  }, [llamaRuntime, open]);
 
   const scan = async () => {
     setIsScanning(true);
@@ -267,6 +295,14 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
     }
   };
 
+  const installLlamaCppRuntime = async (variant: "cpu" | "cuda") => {
+    setError(null);
+    setNotice(null);
+    const status = await api.installLlamaCppRuntime({ variant });
+    setLlamaRuntime(status);
+    setNotice(`llama.cpp ${variant.toUpperCase()} install started. You can leave this dialog open while Quokka downloads it.`);
+  };
+
   const runTestLaunch = async () => {
     setIsTestingLaunch(true);
     setError(null);
@@ -312,6 +348,7 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
   const fieldLabelClass = "text-[11px] font-semibold uppercase tracking-[0.18em] text-milk/42";
   const selectedSourceLabel = selectedArtifact?.file_name ?? (draft.model_path ? inferNameFromPath(draft.model_path) : "No GGUF selected");
   const canContinueFromSource = Boolean(draft.model_path.trim());
+  const llamaRuntimeBusy = llamaRuntime?.status === "queued" || llamaRuntime?.status === "downloading" || llamaRuntime?.status === "extracting";
 
   const goNext = () => {
     if (step === "source") {
@@ -481,6 +518,40 @@ export function AddModelDialog({ open, models, onClose, onAdded }: AddModelDialo
                       : "No llama-server.exe found yet."}
                   </p>
                   {runtimeCheck?.llama_server_candidates[0] ? <p className="mt-2 break-all font-mono text-xs text-live/70">{runtimeCheck.llama_server_candidates[0]}</p> : null}
+                  <div className="mt-3 rounded-[var(--radius-control)] border border-line/50 bg-panel/40 px-3 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-milk/72">Quokka runtime installer</p>
+                      <span className="quokka-pill px-2 py-1 text-[10px] text-milk/50">{llamaRuntime?.status ?? "checking"}</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-milk/45">{llamaRuntime?.error ?? llamaRuntime?.message ?? "Install llama.cpp if this PC has only a GGUF file and no server executable."}</p>
+                    {llamaRuntimeBusy ? (
+                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div className="h-full rounded-full bg-live" style={{ width: `${Math.max(3, llamaRuntime?.progress_percent ?? 0)}%` }} />
+                      </div>
+                    ) : null}
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="quokka-control flex-1 rounded-[var(--radius-control)]"
+                        disabled={llamaRuntimeBusy}
+                        onClick={() => void installLlamaCppRuntime("cpu")}
+                      >
+                        Install CPU
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="quokka-control flex-1 rounded-[var(--radius-control)]"
+                        disabled={llamaRuntimeBusy}
+                        onClick={() => void installLlamaCppRuntime("cuda")}
+                      >
+                        Install CUDA
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </aside>
             </div>

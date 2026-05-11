@@ -213,6 +213,23 @@ class AppUpdateResponse(BaseModel):
     message: str
 
 
+class LlamaCppInstallRequest(BaseModel):
+    variant: str = Field(default="cpu", pattern="^(cpu|cuda)$")
+    force: bool = False
+
+
+class LlamaCppRuntimeStatus(BaseModel):
+    status: str = Field(default="idle", pattern="^(idle|queued|downloading|extracting|installed|failed)$")
+    variant: str = "cpu"
+    version: str | None = None
+    install_dir: str | None = None
+    llama_server_path: str | None = None
+    progress_percent: float = 0.0
+    message: str = "llama.cpp runtime is not installed by Quokka yet."
+    error: str | None = None
+    updated_at: datetime
+
+
 class ModelLibraryFile(BaseModel):
     filename: str
     size_bytes: int | None = None

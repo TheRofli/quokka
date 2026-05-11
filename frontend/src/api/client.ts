@@ -13,6 +13,8 @@ import type {
   DiscoveredModelArtifact,
   HealthCheckResponse,
   LogResponse,
+  LlamaCppInstallRequest,
+  LlamaCppRuntimeStatus,
   MetricHistoryPoint,
   ModelSettings,
   ModelDoctorFixRequest,
@@ -132,6 +134,12 @@ async function streamRequest<TPayload>(
 export const api = {
   getMetrics: () => request<SystemMetricsResponse>("/system/metrics"),
   getUpdateStatus: () => request<AppUpdateResponse>("/system/update"),
+  getLlamaCppRuntimeStatus: () => request<LlamaCppRuntimeStatus>("/system/runtime/llama-cpp"),
+  installLlamaCppRuntime: (payload: LlamaCppInstallRequest) =>
+    request<LlamaCppRuntimeStatus>("/system/runtime/llama-cpp/install", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   createChatCompletion: (payload: ChatCompletionRequest) =>
     request<ChatCompletionResponse>("/chat/completion", {
       method: "POST",

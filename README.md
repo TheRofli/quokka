@@ -55,7 +55,7 @@ Quokka includes a `Model Library` page for friend-friendly local setup:
 - download models into Quokka's local models folder or a folder you choose;
 - add a completed download to the Local Panel as a Windows `llama.cpp` runtime.
 
-For Windows-only users, install a `llama.cpp` Windows build and point Quokka at `llama-server.exe` when Add Model asks for it. WSL is optional, not required.
+For Windows-only users, WSL is optional, not required. Open `Settings -> Windows Runtime` or `Add Model -> Windows setup` and use `Install CPU` / `Install CUDA` to let Quokka download the latest official Windows `llama.cpp` build from `ggml-org/llama.cpp`, extract it into Quokka's data folder, and auto-fill `llama-server.exe`.
 
 ## Quokka Lab Integration
 
@@ -271,6 +271,15 @@ Shortcut build:
 ```
 
 The NSIS installer creates Desktop and Start Menu shortcuts named `Quokka`. For in-app update notices, publish the generated installer in a GitHub Release such as `v0.2.0`; Quokka checks the latest release and shows an Update button when the release version is newer than the local config version.
+
+You can publish a release with:
+
+```powershell
+$env:GITHUB_TOKEN = "github_pat_..."
+.\scripts\publish-github-release.ps1 -Version 0.2.0 -RebuildInstaller
+```
+
+Installer users will open the release installer from the in-app Update button. Source installs still use `quokka update`.
 
 ## Notes
 

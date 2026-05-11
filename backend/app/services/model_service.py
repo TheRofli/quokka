@@ -23,6 +23,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from app.core.errors import BadRequestError, ConflictError, NotFoundError
+from app.core.settings import get_settings
 from app.domain.enums import ModelStatus, ProviderType
 from app.domain.runtime import RuntimeState
 from app.schemas.api import (
@@ -3315,6 +3316,7 @@ class ModelService:
         home = Path.home()
         common = [
             Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "llama.cpp" / "llama-server.exe",
+            get_settings().data_dir / "runtimes" / "llama.cpp",
             home / "llm" / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
             home / "llm" / "llama.cpp" / "build" / "bin" / "llama-server.exe",
             home / "llama.cpp" / "build" / "bin" / "Release" / "llama-server.exe",
@@ -3329,7 +3331,14 @@ class ModelService:
                 ]
             )
         for candidate in common:
-            add(candidate)
+            if candidate.is_dir():
+                try:
+                    for executable in candidate.rglob("llama-server.exe"):
+                        add(executable)
+                except OSError:
+                    continue
+            else:
+                add(candidate)
         return candidates
 
     def _discover_wsl_models(self, distro: str, limit: int) -> list[DiscoveredModelArtifact]:

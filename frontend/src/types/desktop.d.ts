@@ -7,7 +7,7 @@ declare global {
       openFile?: (options?: { title?: string; filters?: Array<{ name: string; extensions: string[] }> }) => Promise<string | null>;
       openFolder?: (options?: { title?: string }) => Promise<string | null>;
       openExternal?: (url: string) => Promise<boolean>;
-      runUpdate?: () => Promise<{ ok: boolean; message: string }>;
+      runUpdate?: (payload?: { installerUrl?: string | null; releaseUrl?: string | null }) => Promise<{ ok: boolean; message: string }>;
     };
   }
 }
