@@ -35,7 +35,11 @@ def get_readiness(
     metrics = model_service.get_system_metrics()
     runtime = model_service.get_runtime_setup_check()
     first_gpu = metrics.gpu_devices[0] if metrics.gpu_devices else None
-    gpu_memory_total_mb = first_gpu.memory_total_mb if first_gpu else metrics.gpu_memory_total_mb
+    gpu_memory_total_mb = (
+        metrics.gpu_memory_total_mb
+        if metrics.gpu_memory_total_mb is not None
+        else (first_gpu.memory_total_mb if first_gpu else None)
+    )
 
     return autopilot_service.build_readiness(
         vram_gb=(gpu_memory_total_mb / 1024) if gpu_memory_total_mb is not None else None,
@@ -86,22 +90,48 @@ async def smoke_test_model(
 ) -> AutopilotSmokeTestResponse:
     try:
         model = model_service.config_service.get_model(model_id)
-        payload = {
-            "model": str(model.metadata.get("served_model", model.name)),
-            "messages": [{"role": "user", "content": "Reply with exactly: pong"}],
-            "temperature": 0,
-            "max_tokens": 8,
-            "stream": False,
-        }
+        if model.provider == ProviderType.OLLAMA:
+            payload = {
+                "model": str(model.metadata.get("ollama_model", model.name)),
+                "messages": [
+                    {"role": "user", "content": "Reply with one short sentence: Quokka smoke test passed."}
+                ],
+                "stream": False,
+                "options": {"temperature": 0.1, "num_predict": 32},
+            }
+            url = urljoin(model.endpoint.rstrip("/") + "/", "api/chat")
+        else:
+            payload = {
+                "model": str(model.metadata.get("served_model", model.name)),
+                "messages": [{"role": "user", "content": "Reply with exactly: pong"}],
+                "temperature": 0,
+                "max_tokens": 8,
+                "stream": False,
+            }
+            url = urljoin(model.endpoint.rstrip("/") + "/", "v1/chat/completions")
+
         started = time.perf_counter()
         timeout = httpx.Timeout(model.settings.request_timeout_seconds, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(urljoin(model.endpoint.rstrip("/") + "/", "v1/chat/completions"), json=payload)
+            response = await client.post(url, json=payload)
         if not response.is_success:
             raise RuntimeError(f"HTTP {response.status_code}: {response.text[:500]}")
 
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
         data = response.json()
+        if model.provider == ProviderType.OLLAMA:
+            message = data.get("message") if isinstance(data, dict) else None
+            content = message.get("content") if isinstance(message, dict) else None
+            if not str(content or "").strip():
+                raise RuntimeError("Smoke test response did not include message.content.")
+        else:
+            choices = data.get("choices") if isinstance(data, dict) else None
+            first_choice = choices[0] if isinstance(choices, list) and choices else None
+            message = first_choice.get("message") if isinstance(first_choice, dict) else None
+            content = message.get("content") if isinstance(message, dict) else None
+            if not str(content or "").strip():
+                raise RuntimeError("Smoke test response did not include choices[0].message.content.")
+
         usage = data.get("usage") if isinstance(data, dict) else None
         prompt_tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
         completion_tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
