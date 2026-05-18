@@ -146,6 +146,71 @@ class TestLaunchResponse(BaseModel):
     llama_server_path: str | None = None
 
 
+class AutopilotReadinessItem(BaseModel):
+    id: str
+    label: str
+    status: str = Field(pattern="^(pass|warn|fail|info)$")
+    detail: str
+    fix_action: str | None = None
+
+
+class AutopilotReadinessResponse(BaseModel):
+    score_percent: int = Field(ge=0, le=100)
+    summary: str
+    hardware_class: str
+    recommended_runtime: ProviderType
+    recommended_profile: str
+    bottlenecks: list[str] = Field(default_factory=list)
+    items: list[AutopilotReadinessItem] = Field(default_factory=list)
+
+
+class AutopilotStarterPlanRequest(BaseModel):
+    use_case: str = Field(default="chat", pattern="^(chat|coding|small_fast)$")
+    runtime: ProviderType | None = None
+
+
+class AutopilotStarterPlanResponse(BaseModel):
+    name: str
+    repo_id: str
+    filename: str
+    download_url: str
+    size_bytes: int | None = None
+    quantization: str | None = None
+    why: str
+    create_model: CreateModelRequest
+
+
+class AutopilotActionLogEntry(BaseModel):
+    id: str
+    timestamp: datetime
+    action: str
+    status: str = Field(pattern="^(planned|running|completed|failed)$")
+    summary: str
+    details: list[str] = Field(default_factory=list)
+    undo_hint: str | None = None
+    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
+
+
+class AutopilotActionLogRequest(BaseModel):
+    action: str
+    status: str = Field(pattern="^(planned|running|completed|failed)$")
+    summary: str
+    details: list[str] = Field(default_factory=list)
+    undo_hint: str | None = None
+    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
+
+
+class AutopilotSmokeTestResponse(BaseModel):
+    model_id: str
+    ok: bool
+    summary: str
+    latency_ms: float | None = None
+    tokens_per_second: float | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    error: str | None = None
+
+
 class ApplyBenchmarkProfileRequest(BaseModel):
     name: str | None = None
     launch_params: dict[str, Any] = Field(default_factory=dict)
