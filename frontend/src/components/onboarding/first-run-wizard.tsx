@@ -21,7 +21,7 @@ interface FirstRunWizardProps {
   modelCount: number;
   activeModelId?: string | null;
   onAddModel: () => void;
-  onOpenLibrary: () => void;
+  onOpenLibrary: (searchQuery?: string | null) => void;
   onOpenTests: () => void;
   onOpenChat: () => void;
   onDismiss: () => void;
@@ -36,7 +36,15 @@ interface WizardStorageState {
   message?: string | null;
 }
 
-const storageKey = "quokka.autopilot.wizard.state";
+export const FIRST_RUN_WIZARD_STORAGE_KEY = "quokka.autopilot.wizard.state";
+
+export function hasFirstRunWizardState() {
+  try {
+    return window.localStorage.getItem(FIRST_RUN_WIZARD_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
 
 const statusTone: Record<string, string> = {
   pass: "border-success/35 bg-success/10 text-success",
@@ -66,7 +74,7 @@ function isAutopilotStep(value: unknown): value is AutopilotStep {
 
 function loadWizardState(): WizardStorageState {
   try {
-    const raw = window.localStorage.getItem(storageKey);
+    const raw = window.localStorage.getItem(FIRST_RUN_WIZARD_STORAGE_KEY);
     if (!raw) {
       return {};
     }
@@ -113,7 +121,7 @@ export function FirstRunWizard({
       actions: actions.slice(0, 8),
       message,
     };
-    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    window.localStorage.setItem(FIRST_RUN_WIZARD_STORAGE_KEY, JSON.stringify(payload));
   }, [actions, activeStep, message, plan, readiness]);
 
   const persistWizardState = (overrides: WizardStorageState = {}) => {
@@ -125,7 +133,7 @@ export function FirstRunWizard({
       message,
       ...overrides,
     };
-    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+    window.localStorage.setItem(FIRST_RUN_WIZARD_STORAGE_KEY, JSON.stringify(payload));
   };
 
   const scan = async () => {
@@ -176,7 +184,7 @@ export function FirstRunWizard({
       ]);
       persistWizardState({ activeStep: "download" });
       setActiveStep("download");
-      onOpenLibrary();
+      onOpenLibrary(plan?.repo_id ?? null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not record the Autopilot action");
     } finally {
@@ -351,11 +359,11 @@ export function FirstRunWizard({
             ) : null}
             {activeStep === "recommend" ? (
               <Button type="button" variant="primary" disabled={running} onClick={() => void handleOpenRecommendedDownload()}>
-                Open recommended download
+                Open recommendation in Model Library
               </Button>
             ) : null}
             {activeStep === "download" ? (
-              <Button type="button" variant="primary" onClick={onOpenLibrary}>
+              <Button type="button" variant="primary" onClick={() => onOpenLibrary(plan?.repo_id ?? null)}>
                 Continue in Model Library
               </Button>
             ) : null}

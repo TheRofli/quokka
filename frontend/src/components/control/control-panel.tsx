@@ -335,6 +335,31 @@ function DoctorCheckRow({ check }: { check: ModelDoctorCheck }) {
   );
 }
 
+function findDoctorActionCheck(doctor: ModelDoctorResponse | null, action: string) {
+  return doctor?.checks.find((check) => check.action === action) ?? null;
+}
+
+function WslRuntimeTrustPanel({ model, doctor }: { model: ModelView; doctor: ModelDoctorResponse | null }) {
+  const actionCheck = findDoctorActionCheck(doctor, "switch_wsl_runtime");
+  const modelPath = String(model.metadata.model_path ?? "");
+  const drivePrefix = modelPath.match(/^[a-zA-Z]:[\\/]/)?.[0]?.[0]?.toLowerCase();
+  const convertedPathHint = drivePrefix ? `/mnt/${drivePrefix}/...` : "a Linux path like /mnt/d/Models/model.gguf";
+  const fixSummary =
+    actionCheck?.fix_summary ??
+    `Quokka will switch this Windows llama.cpp model to WSL, convert the GGUF path to ${convertedPathHint}, clear the Windows llama-server.exe override, and rebuild the launch command.`;
+  const undoHint = actionCheck?.undo_hint ?? "Use Switch to Windows from Health Doctor to convert the path back if you need to restore the Windows runtime.";
+  const confidence = actionCheck?.confidence ?? (drivePrefix ? "high" : "medium");
+
+  return (
+    <div className="mt-3 rounded-[var(--radius-control)] border border-accent/25 bg-accent/10 p-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Before switching to WSL</p>
+      <p className="mt-2 text-sm leading-5 text-milk/60">{fixSummary}</p>
+      <p className="mt-2 text-xs text-milk/42">Undo: {undoHint}</p>
+      <p className="mt-2 text-xs text-milk/42">Confidence: {confidence}</p>
+    </div>
+  );
+}
+
 export function ControlPanel({
   metrics,
   models,
@@ -1042,6 +1067,7 @@ export function ControlPanel({
                       ) : null}
                       <div className="border-t border-line/55 px-4 py-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-milk/48">Fix wizard</p>
+                        {selectedModel.provider === "windows_llama_cpp" ? <WslRuntimeTrustPanel model={selectedModel} doctor={doctor} /> : null}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button
                             variant="secondary"
@@ -1239,6 +1265,7 @@ export function ControlPanel({
                       ) : null}
                       <div className="border-t border-line/55 px-4 py-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-milk/48">Repair actions</p>
+                        {selectedModel.provider === "windows_llama_cpp" ? <WslRuntimeTrustPanel model={selectedModel} doctor={doctor} /> : null}
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("change_port")}>
                             Change port

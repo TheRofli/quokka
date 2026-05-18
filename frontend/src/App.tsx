@@ -7,7 +7,7 @@ import { PageShell } from "@/components/app/page-shell";
 import { TopStatusBar } from "@/components/app/top-status-bar";
 import { AddModelDialog } from "@/components/dashboard/add-model-dialog";
 import type { MetricId } from "@/components/dashboard/metric-detail-dialog";
-import { FirstRunWizard } from "@/components/onboarding/first-run-wizard";
+import { FIRST_RUN_WIZARD_STORAGE_KEY, FirstRunWizard, hasFirstRunWizardState } from "@/components/onboarding/first-run-wizard";
 import { RuntimeErrorBoundary } from "@/components/runtime-error-boundary";
 import { api } from "@/api/client";
 import { useQuokkaDashboard } from "@/hooks/use-quokka-dashboard";
@@ -77,10 +77,12 @@ function LazyPanelFallback({ label }: { label: string }) {
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => window.localStorage.getItem("quokka.sidebar.open") !== "0");
   const [mode, setMode] = useState<"control" | "library" | "chat" | "tests" | "settings">("control");
+  const [librarySearchQuery, setLibrarySearchQuery] = useState<string | null>(null);
   const [chatMounted, setChatMounted] = useState(false);
   const [addModelOpen, setAddModelOpen] = useState(false);
   const [themeId, setThemeId] = useState(() => window.localStorage.getItem("quokka.theme") ?? "quokka");
   const [firstRunDismissed, setFirstRunDismissed] = useState(() => window.localStorage.getItem("quokka.firstRun.dismissed") === "1");
+  const [firstRunWizardStarted, setFirstRunWizardStarted] = useState(hasFirstRunWizardState);
   const [selectedMetricId, setSelectedMetricId] = useState<MetricId | null>(null);
   const [updateStatus, setUpdateStatus] = useState<AppUpdateResponse | null>(null);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
@@ -123,6 +125,12 @@ function App() {
   }, [mode]);
 
   useEffect(() => {
+    if (!firstRunDismissed && !isLoading && models.length === 0) {
+      setFirstRunWizardStarted(true);
+    }
+  }, [firstRunDismissed, isLoading, models.length]);
+
+  useEffect(() => {
     api.getUpdateStatus().then(setUpdateStatus).catch(() => setUpdateStatus(null));
   }, []);
 
@@ -156,7 +164,16 @@ function App() {
 
   const dismissFirstRun = () => {
     setFirstRunDismissed(true);
+    setFirstRunWizardStarted(false);
     window.localStorage.setItem("quokka.firstRun.dismissed", "1");
+    window.localStorage.removeItem(FIRST_RUN_WIZARD_STORAGE_KEY);
+  };
+
+  const openLibrary = (searchQuery?: string | null) => {
+    if (searchQuery) {
+      setLibrarySearchQuery(searchQuery);
+    }
+    setMode("library");
   };
 
   const runUpdate = async () => {
@@ -183,6 +200,7 @@ function App() {
   };
 
   const llamaRuntimeBusy = llamaRuntime?.status === "queued" || llamaRuntime?.status === "downloading" || llamaRuntime?.status === "extracting";
+  const showFirstRunWizard = mode === "control" && !firstRunDismissed && !isLoading && (models.length === 0 || firstRunWizardStarted);
   const settingsCenter = (
     <div className="px-5 py-5">
       <div className="max-w-6xl">
@@ -314,7 +332,7 @@ function App() {
           >
             Install CUDA
           </button>
-          <button type="button" onClick={() => setMode("library")} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
+          <button type="button" onClick={() => openLibrary()} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
             Open Library
           </button>
           <button type="button" onClick={() => setAddModelOpen(true)} className="quokka-control px-3 py-2 text-xs font-semibold text-milk/78 hover:text-accent">
@@ -373,7 +391,7 @@ function App() {
                     className={`flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left text-[15px] font-semibold transition-colors ${
                       mode === id ? "bg-white/[0.09] text-milk" : "text-milk/62 hover:bg-white/[0.045] hover:text-milk"
                     }`}
-                    onClick={() => setMode(id as typeof mode)}
+                    onClick={() => (id === "library" ? openLibrary() : setMode(id as typeof mode))}
                   >
                     <Icon className="h-4 w-4" />
                     {label}
@@ -403,7 +421,7 @@ function App() {
                   className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
                     mode === "library" ? "border-accent bg-accent text-[#171410]" : "border-line bg-white/[0.03] text-milk/62"
                   }`}
-                  onClick={() => setMode("library")}
+                  onClick={() => openLibrary()}
                 >
                   Model Library
                 </button>
@@ -464,12 +482,12 @@ function App() {
           </div>
         ) : null}
 
-        {mode === "control" && !firstRunDismissed ? (
+        {showFirstRunWizard ? (
           <FirstRunWizard
             modelCount={models.length}
             activeModelId={selectedModelId ?? selectedModel?.id ?? null}
             onAddModel={() => setAddModelOpen(true)}
-            onOpenLibrary={() => setMode("library")}
+            onOpenLibrary={(searchQuery) => openLibrary(searchQuery)}
             onOpenTests={() => setMode("tests")}
             onOpenChat={() => setMode("chat")}
             onDismiss={dismissFirstRun}
@@ -493,7 +511,7 @@ function App() {
 
         {mode === "library" ? (
           <Suspense fallback={<LazyPanelFallback label="Loading Model Library..." />}>
-            <ModelLibrary models={models} metrics={metrics} onAdded={refreshDashboard} />
+            <ModelLibrary models={models} metrics={metrics} initialQuery={librarySearchQuery} onAdded={refreshDashboard} />
           </Suspense>
         ) : null}
 

@@ -35,6 +35,7 @@ import type {
 interface ModelLibraryProps {
   models: ModelView[];
   metrics?: SystemMetricsResponse | null;
+  initialQuery?: string | null;
   onAdded: () => Promise<void>;
 }
 
@@ -493,8 +494,9 @@ function ResultRow({
   );
 }
 
-export function ModelLibrary({ models, metrics, onAdded }: ModelLibraryProps) {
-  const [query, setQuery] = useState("qwen coder gguf q4_k_m");
+export function ModelLibrary({ models, metrics, initialQuery, onAdded }: ModelLibraryProps) {
+  const defaultQuery = initialQuery ?? "qwen coder gguf q4_k_m";
+  const [query, setQuery] = useState(defaultQuery);
   const [manualReference, setManualReference] = useState("");
   const [targetDir, setTargetDir] = useState("");
   const [entries, setEntries] = useState<ModelLibraryEntry[]>([]);
@@ -562,10 +564,17 @@ export function ModelLibrary({ models, metrics, onAdded }: ModelLibraryProps) {
   useEffect(() => {
     void refreshDownloads();
     void api
-      .searchLibraryModels(query)
+      .searchLibraryModels(defaultQuery)
       .then((result) => setEntries(result.entries))
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!initialQuery || initialQuery === query) {
+      return;
+    }
+    void runSearch(initialQuery);
+  }, [initialQuery, query]);
 
   useEffect(() => {
     if (!activeDownloads.length) {
