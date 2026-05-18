@@ -1,4 +1,5 @@
 export type ProviderType = "wsl_llama_cpp" | "windows_llama_cpp" | "ollama" | "openai_compatible";
+export type ModelProvider = ProviderType;
 export type ModelStatus =
   | "stopped"
   | "starting"
@@ -215,6 +216,71 @@ export interface TestLaunchResponse {
   summary: string;
   checks: RuntimeSetupCheck[];
   llama_server_path?: string | null;
+}
+
+export interface AutopilotReadinessItem {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail" | "info";
+  detail: string;
+  fix_action?: string | null;
+}
+
+export interface AutopilotReadinessResponse {
+  score_percent: number;
+  summary: string;
+  hardware_class: string;
+  recommended_runtime: ModelProvider;
+  recommended_profile: string;
+  bottlenecks: string[];
+  items: AutopilotReadinessItem[];
+}
+
+export interface AutopilotStarterPlanRequest {
+  use_case: "chat" | "coding" | "small_fast";
+  runtime?: ModelProvider | null;
+}
+
+export interface AutopilotStarterPlanResponse {
+  name: string;
+  repo_id: string;
+  filename: string;
+  download_url: string;
+  size_bytes?: number | null;
+  quantization?: string | null;
+  why: string;
+  create_model: CreateModelRequest;
+}
+
+export interface AutopilotActionLogEntry {
+  id: string;
+  timestamp: string;
+  action: string;
+  status: "planned" | "running" | "completed" | "failed";
+  summary: string;
+  details: string[];
+  undo_hint?: string | null;
+  confidence: "low" | "medium" | "high";
+}
+
+export interface AutopilotActionLogRequest {
+  action: string;
+  status: "planned" | "running" | "completed" | "failed";
+  summary: string;
+  details: string[];
+  undo_hint?: string | null;
+  confidence: "low" | "medium" | "high";
+}
+
+export interface AutopilotSmokeTestResponse {
+  model_id: string;
+  ok: boolean;
+  summary: string;
+  latency_ms?: number | null;
+  tokens_per_second?: number | null;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  error?: string | null;
 }
 
 export interface ModelLibraryFile {

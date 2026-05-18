@@ -2,6 +2,12 @@ import type {
   AppConfig,
   AppUpdateResponse,
   ApplyBenchmarkProfileRequest,
+  AutopilotActionLogEntry,
+  AutopilotActionLogRequest,
+  AutopilotReadinessResponse,
+  AutopilotSmokeTestResponse,
+  AutopilotStarterPlanRequest,
+  AutopilotStarterPlanResponse,
   BenchmarkRunRequest,
   BenchmarkRunResponse,
   BulkImportModelsRequest,
@@ -134,6 +140,20 @@ async function streamRequest<TPayload>(
 }
 
 export const api = {
+  getAutopilotReadiness: () => request<AutopilotReadinessResponse>("/autopilot/readiness"),
+  createAutopilotStarterPlan: (payload: AutopilotStarterPlanRequest) =>
+    request<AutopilotStarterPlanResponse>("/autopilot/plan/starter", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  getAutopilotActions: () => request<AutopilotActionLogEntry[]>("/autopilot/actions"),
+  appendAutopilotAction: (payload: AutopilotActionLogRequest) =>
+    request<AutopilotActionLogEntry>("/autopilot/actions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  runAutopilotSmokeTest: (modelId: string) =>
+    request<AutopilotSmokeTestResponse>(`/autopilot/smoke-test/${modelId}`, { method: "POST" }),
   getMetrics: () => request<SystemMetricsResponse>("/system/metrics"),
   getUpdateStatus: () => request<AppUpdateResponse>("/system/update"),
   getLlamaCppRuntimeStatus: () => request<LlamaCppRuntimeStatus>("/system/runtime/llama-cpp"),
