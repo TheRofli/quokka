@@ -277,7 +277,16 @@ class ModelService:
             else:
                 add_check("llama-server", "llama-server.exe", "info", "No explicit executable path. Quokka will use PATH.")
         elif model.provider == ProviderType.WSL_LLAMA_CPP:
-            add_check("runtime", "Runtime", "warn", "This model is configured for WSL.", "Switch to Windows llama.cpp if the GGUF is on a Windows drive.")
+            if re.match(r"^[a-zA-Z]:[\\/]", model_path):
+                add_check(
+                    "runtime",
+                    "Runtime",
+                    "fail",
+                    "This model is configured for WSL but still points to a Windows path.",
+                    "Switch to WSL runtime to convert the path to /mnt/<drive>/...",
+                )
+            else:
+                add_check("runtime", "Runtime", "info", "This model starts through WSL llama.cpp.")
         else:
             add_check("runtime", "Runtime", "info", f"Provider: {model.provider.value}")
 
@@ -344,6 +353,18 @@ class ModelService:
                 raise BadRequestError("Port must be between 1 and 65535.")
         elif payload.action == "switch_windows_runtime":
             next_provider = ProviderType.WINDOWS_LLAMA_CPP
+            if self._is_wsl_mnt_path(next_model_path):
+                next_model_path = self._wsl_path_string_to_windows(next_model_path)
+        elif payload.action == "switch_wsl_runtime":
+            candidate_path = str(payload.value or "").strip().strip("\"'")
+            if candidate_path:
+                next_model_path = candidate_path
+            next_provider = ProviderType.WSL_LLAMA_CPP
+            next_llama_server_path = ""
+            if re.match(r"^[a-zA-Z]:[\\/]", next_model_path):
+                next_model_path = self._windows_path_string_to_wsl(next_model_path)
+            if not (next_model_path.startswith("/") or next_model_path.startswith("~/")):
+                raise BadRequestError("WSL runtime needs a Linux path like /mnt/d/Models/model.gguf or ~/llm/models/model.gguf.")
         elif payload.action == "set_llama_server_path":
             next_llama_server_path = str(payload.value or "").strip().strip("\"'")
             if not next_llama_server_path:
@@ -356,6 +377,7 @@ class ModelService:
             if not next_model_path:
                 raise BadRequestError("Model path is required.")
             next_provider = ProviderType.WINDOWS_LLAMA_CPP if re.match(r"^[a-zA-Z]:[\\/]", next_model_path) else next_provider
+            next_provider = ProviderType.WSL_LLAMA_CPP if next_model_path.startswith("/") or next_model_path.startswith("~/") else next_provider
             if next_provider == ProviderType.WINDOWS_LLAMA_CPP and not Path(next_model_path).exists():
                 raise BadRequestError(f"Model file was not found at {next_model_path}.")
         else:
@@ -370,7 +392,7 @@ class ModelService:
             model,
             provider=next_provider,
             model_path=next_model_path,
-            llama_server_path=next_llama_server_path or None,
+            llama_server_path=next_llama_server_path,
             host=next_host,
             port=next_port,
         )
@@ -3486,6 +3508,30 @@ class ModelService:
             return resolved.as_posix()
         rest = "/".join(resolved.parts[1:])
         return f"/mnt/{drive}/{rest}"
+
+    @staticmethod
+    def _windows_path_string_to_wsl(path: str) -> str:
+        raw = path.strip().strip("\"'")
+        match = re.match(r"^([a-zA-Z]):[\\/](.*)$", raw)
+        if not match:
+            return raw.replace("\\", "/")
+        drive = match.group(1).lower()
+        rest = match.group(2).replace("\\", "/").lstrip("/")
+        return f"/mnt/{drive}/{rest}"
+
+    @staticmethod
+    def _is_wsl_mnt_path(path: str) -> bool:
+        return bool(re.match(r"^/mnt/[a-zA-Z]/", path.strip()))
+
+    @staticmethod
+    def _wsl_path_string_to_windows(path: str) -> str:
+        raw = path.strip().strip("\"'")
+        match = re.match(r"^/mnt/([a-zA-Z])/(.*)$", raw)
+        if not match:
+            return raw
+        drive = match.group(1).upper()
+        rest = match.group(2).replace("/", "\\")
+        return f"{drive}:\\{rest}"
 
     @staticmethod
     def _file_name_from_path(path: str) -> str:

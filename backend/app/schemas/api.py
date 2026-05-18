@@ -135,7 +135,7 @@ class ModelDoctorResponse(BaseModel):
 
 
 class ModelDoctorFixRequest(BaseModel):
-    action: str = Field(pattern="^(change_port|switch_windows_runtime|set_llama_server_path|set_model_path)$")
+    action: str = Field(pattern="^(change_port|switch_windows_runtime|switch_wsl_runtime|set_llama_server_path|set_model_path)$")
     value: str | int | None = None
 
 

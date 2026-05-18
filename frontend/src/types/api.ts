@@ -206,7 +206,7 @@ export interface ModelDoctorResponse {
 }
 
 export interface ModelDoctorFixRequest {
-  action: "change_port" | "switch_windows_runtime" | "set_llama_server_path" | "set_model_path";
+  action: "change_port" | "switch_windows_runtime" | "switch_wsl_runtime" | "set_llama_server_path" | "set_model_path";
   value?: string | number | null;
 }
 

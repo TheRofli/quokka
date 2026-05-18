@@ -460,7 +460,7 @@ export function ControlPanel({
     };
   }, [selectedModel?.id, selectedModel?.runtime.status, health?.ok, health?.detail]);
 
-  const runDoctorFix = async (action: "change_port" | "switch_windows_runtime" | "set_llama_server_path" | "set_model_path") => {
+  const runDoctorFix = async (action: "change_port" | "switch_windows_runtime" | "switch_wsl_runtime" | "set_llama_server_path" | "set_model_path") => {
     if (!selectedModel) {
       return;
     }
@@ -488,6 +488,14 @@ export function ControlPanel({
         return;
       }
       value = next;
+    } else if (action === "switch_wsl_runtime") {
+      const currentPath = String(selectedModel.metadata.model_path ?? "");
+      const message = currentPath.match(/^[a-zA-Z]:[\\/]/)
+        ? `Switch this model to WSL and convert the model path to /mnt/${currentPath[0].toLowerCase()}/...?`
+        : "Switch this model to WSL llama.cpp?";
+      if (!window.confirm(message)) {
+        return;
+      }
     }
 
     setDoctorFixSaving(true);
@@ -1047,6 +1055,17 @@ export function ControlPanel({
                               Switch to Windows
                             </Button>
                           ) : null}
+                          {selectedModel.provider === "windows_llama_cpp" ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={doctorFixSaving}
+                              className="quokka-control rounded-[var(--radius-control)]"
+                              onClick={() => void runDoctorFix("switch_wsl_runtime")}
+                            >
+                              Switch to WSL
+                            </Button>
+                          ) : null}
                           <Button
                             variant="secondary"
                             size="sm"
@@ -1219,6 +1238,11 @@ export function ControlPanel({
                           {selectedModel.provider === "wsl_llama_cpp" ? (
                             <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("switch_windows_runtime")}>
                               Switch to Windows
+                            </Button>
+                          ) : null}
+                          {selectedModel.provider === "windows_llama_cpp" ? (
+                            <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("switch_wsl_runtime")}>
+                              Switch to WSL
                             </Button>
                           ) : null}
                           <Button variant="secondary" size="sm" disabled={doctorFixSaving} className="quokka-control rounded-[var(--radius-control)]" onClick={() => void runDoctorFix("set_llama_server_path")}>
