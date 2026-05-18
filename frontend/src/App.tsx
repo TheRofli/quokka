@@ -170,9 +170,7 @@ function App() {
   };
 
   const openLibrary = (searchQuery?: string | null) => {
-    if (searchQuery) {
-      setLibrarySearchQuery(searchQuery);
-    }
+    setLibrarySearchQuery(searchQuery ?? null);
     setMode("library");
   };
 
