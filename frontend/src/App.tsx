@@ -466,10 +466,13 @@ function App() {
 
         {mode === "control" && !models.length && !firstRunDismissed ? (
           <FirstRunWizard
+            modelCount={models.length}
             onAddModel={() => setAddModelOpen(true)}
             onOpenLibrary={() => setMode("library")}
             onOpenTests={() => setMode("tests")}
+            onOpenChat={() => setMode("chat")}
             onDismiss={dismissFirstRun}
+            onRefreshModels={refreshDashboard}
           />
         ) : null}
 
