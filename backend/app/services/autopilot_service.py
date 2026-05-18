@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from app.domain.enums import ProviderType
 from app.schemas.api import (
@@ -52,6 +55,8 @@ STARTER_MODELS = {
     },
 }
 
+_ACTION_LOG_LOCK = threading.RLock()
+
 
 def score_readiness(pass_count: int, warn_count: int, fail_count: int) -> int:
     score = 100 - warn_count * 15 - fail_count * 30
@@ -78,12 +83,35 @@ class AutopilotService:
         self.data_dir = data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.data_dir / "autopilot-actions.json"
+        self.corrupt_log_path = self.data_dir / "autopilot-actions.corrupt.json"
 
     def list_actions(self) -> list[AutopilotActionLogEntry]:
+        with _ACTION_LOG_LOCK:
+            return self._read_actions_unlocked()
+
+    def _read_actions_unlocked(self) -> list[AutopilotActionLogEntry]:
         if not self.log_path.exists():
             return []
-        payload = json.loads(self.log_path.read_text(encoding="utf-8"))
-        return [AutopilotActionLogEntry.model_validate(item) for item in payload]
+        try:
+            payload = json.loads(self.log_path.read_text(encoding="utf-8"))
+            return [AutopilotActionLogEntry.model_validate(item) for item in payload]
+        except (json.JSONDecodeError, TypeError, ValidationError):
+            self._quarantine_corrupt_log_unlocked()
+            return []
+
+    def _quarantine_corrupt_log_unlocked(self) -> None:
+        if self.log_path.exists():
+            self.log_path.replace(self.corrupt_log_path)
+
+    def _write_actions_unlocked(self, entries: list[AutopilotActionLogEntry]) -> None:
+        payload = [item.model_dump(mode="json") for item in entries[:100]]
+        temp_path = self.log_path.with_name(f"{self.log_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            temp_path.replace(self.log_path)
+        finally:
+            if temp_path.exists():
+                temp_path.unlink()
 
     def append_action(
         self,
@@ -95,20 +123,20 @@ class AutopilotService:
         undo_hint: str | None,
         confidence: str,
     ) -> AutopilotActionLogEntry:
-        entry = AutopilotActionLogEntry(
-            id=f"auto-{uuid.uuid4().hex[:10]}",
-            timestamp=datetime.now(UTC),
-            action=action,
-            status=status,
-            summary=summary,
-            details=details,
-            undo_hint=undo_hint,
-            confidence=confidence,
-        )
-        entries = [entry, *self.list_actions()]
-        payload = [item.model_dump(mode="json") for item in entries[:100]]
-        self.log_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        return entry
+        with _ACTION_LOG_LOCK:
+            entry = AutopilotActionLogEntry(
+                id=f"auto-{uuid.uuid4().hex[:10]}",
+                timestamp=datetime.now(UTC),
+                action=action,
+                status=status,
+                summary=summary,
+                details=details,
+                undo_hint=undo_hint,
+                confidence=confidence,
+            )
+            entries = [entry, *self._read_actions_unlocked()]
+            self._write_actions_unlocked(entries)
+            return entry
 
     def create_starter_plan(
         self,

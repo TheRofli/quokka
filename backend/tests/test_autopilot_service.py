@@ -37,6 +37,34 @@ class AutopilotServiceTests(unittest.TestCase):
         self.assertEqual(entries[0].confidence, "high")
         self.assertIn("WSL", entries[0].summary)
 
+    def test_list_actions_recovers_corrupt_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir)
+            log_path = data_dir / "autopilot-actions.json"
+            corrupt_path = data_dir / "autopilot-actions.corrupt.json"
+            log_path.write_text("{not valid json", encoding="utf-8")
+            service = AutopilotService(data_dir=data_dir)
+
+            entries = service.list_actions()
+
+            self.assertEqual(entries, [])
+            self.assertFalse(log_path.exists())
+            self.assertEqual(corrupt_path.read_text(encoding="utf-8"), "{not valid json")
+
+    def test_list_actions_recovers_schema_invalid_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_dir = Path(temp_dir)
+            log_path = data_dir / "autopilot-actions.json"
+            corrupt_path = data_dir / "autopilot-actions.corrupt.json"
+            log_path.write_text('[{"id": "missing-required-fields"}]', encoding="utf-8")
+            service = AutopilotService(data_dir=data_dir)
+
+            entries = service.list_actions()
+
+            self.assertEqual(entries, [])
+            self.assertFalse(log_path.exists())
+            self.assertEqual(corrupt_path.read_text(encoding="utf-8"), '[{"id": "missing-required-fields"}]')
+
     def test_starter_plan_prefers_windows_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = AutopilotService(data_dir=Path(temp_dir))
