@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, DownloadCloud, FileSearch, FlaskConical, MessageSquare, Play, Radar, X } from "lucide-react";
 
 import { api } from "@/api/client";
@@ -19,6 +19,7 @@ const steps = [
 
 interface FirstRunWizardProps {
   modelCount: number;
+  activeModelId?: string | null;
   onAddModel: () => void;
   onOpenLibrary: () => void;
   onOpenTests: () => void;
@@ -26,6 +27,16 @@ interface FirstRunWizardProps {
   onDismiss: () => void;
   onRefreshModels: () => Promise<void>;
 }
+
+interface WizardStorageState {
+  activeStep?: AutopilotStep;
+  readiness?: AutopilotReadinessResponse | null;
+  plan?: AutopilotStarterPlanResponse | null;
+  actions?: AutopilotActionLogEntry[];
+  message?: string | null;
+}
+
+const storageKey = "quokka.autopilot.wizard.state";
 
 const statusTone: Record<string, string> = {
   pass: "border-success/35 bg-success/10 text-success",
@@ -49,8 +60,32 @@ function formatActionTime(timestamp: string) {
   return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
 }
 
+function isAutopilotStep(value: unknown): value is AutopilotStep {
+  return typeof value === "string" && steps.some((step) => step.id === value);
+}
+
+function loadWizardState(): WizardStorageState {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as WizardStorageState;
+    return {
+      activeStep: isAutopilotStep(parsed.activeStep) ? parsed.activeStep : undefined,
+      readiness: parsed.readiness ?? null,
+      plan: parsed.plan ?? null,
+      actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 8) : [],
+      message: parsed.message ?? null,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function FirstRunWizard({
   modelCount,
+  activeModelId,
   onAddModel,
   onOpenLibrary,
   onOpenTests,
@@ -58,16 +93,40 @@ export function FirstRunWizard({
   onDismiss,
   onRefreshModels,
 }: FirstRunWizardProps) {
-  const [activeStep, setActiveStep] = useState<AutopilotStep>("scan");
-  const [readiness, setReadiness] = useState<AutopilotReadinessResponse | null>(null);
-  const [plan, setPlan] = useState<AutopilotStarterPlanResponse | null>(null);
-  const [actions, setActions] = useState<AutopilotActionLogEntry[]>([]);
+  const [storedState] = useState(loadWizardState);
+  const [activeStep, setActiveStep] = useState<AutopilotStep>(storedState.activeStep ?? "scan");
+  const [readiness, setReadiness] = useState<AutopilotReadinessResponse | null>(storedState.readiness ?? null);
+  const [plan, setPlan] = useState<AutopilotStarterPlanResponse | null>(storedState.plan ?? null);
+  const [actions, setActions] = useState<AutopilotActionLogEntry[]>(storedState.actions ?? []);
   const [running, setRunning] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(storedState.message ?? null);
   const [error, setError] = useState<string | null>(null);
 
   const activeIndex = steps.findIndex((step) => step.id === activeStep);
   const ActiveIcon = stepIcon[activeStep];
+
+  useEffect(() => {
+    const payload: WizardStorageState = {
+      activeStep,
+      readiness,
+      plan,
+      actions: actions.slice(0, 8),
+      message,
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [actions, activeStep, message, plan, readiness]);
+
+  const persistWizardState = (overrides: WizardStorageState = {}) => {
+    const payload: WizardStorageState = {
+      activeStep,
+      readiness,
+      plan,
+      actions: actions.slice(0, 8),
+      message,
+      ...overrides,
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  };
 
   const scan = async () => {
     setRunning(true);
@@ -115,6 +174,7 @@ export function FirstRunWizard({
         plan ? `Recommended ${plan.name} (${plan.filename}).` : "Opened Model Library for starter model selection.",
         readiness ? `Readiness score was ${readiness.score_percent}%.` : "Readiness score was not available.",
       ]);
+      persistWizardState({ activeStep: "download" });
       setActiveStep("download");
       onOpenLibrary();
     } catch (nextError) {
@@ -133,6 +193,45 @@ export function FirstRunWizard({
       setActiveStep(modelCount > 0 ? "test" : "launch");
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "Could not refresh model status");
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const runSmokeTest = async () => {
+    if (!activeModelId) {
+      setError("Add and select a model before running the smoke test.");
+      return;
+    }
+    setRunning(true);
+    setError(null);
+    try {
+      const result = await api.runAutopilotSmokeTest(activeModelId);
+      if (result.ok) {
+        const performance = [
+          result.latency_ms != null ? `${result.latency_ms} ms latency` : null,
+          result.tokens_per_second != null ? `${result.tokens_per_second} tok/s` : null,
+        ].filter(Boolean);
+        await logAction("Smoke test passed.", [
+          result.summary,
+          performance.length ? performance.join(", ") : "No performance counters were returned.",
+        ]);
+        const nextMessage = `Smoke test passed${performance.length ? `: ${performance.join(", ")}` : "."}`;
+        persistWizardState({ activeStep: "chat", message: nextMessage });
+        setMessage(nextMessage);
+        setActiveStep("chat");
+        return;
+      }
+      await logAction("Smoke test failed.", [result.summary, result.error ?? "No error detail returned."], "failed");
+      setError(result.error ?? result.summary);
+    } catch (nextError) {
+      const nextMessage = nextError instanceof Error ? nextError.message : "Smoke test failed";
+      try {
+        await logAction("Smoke test failed.", [nextMessage], "failed");
+      } catch {
+        // Preserve the original smoke-test failure for the user.
+      }
+      setError(nextMessage);
     } finally {
       setRunning(false);
     }
@@ -161,7 +260,7 @@ export function FirstRunWizard({
       <div className="mt-4 grid gap-2 md:grid-cols-7">
         {steps.map((step, index) => {
           const isActive = step.id === activeStep;
-          const isComplete = index < activeIndex;
+          const isVisited = index < activeIndex;
           return (
             <button
               key={step.id}
@@ -170,8 +269,8 @@ export function FirstRunWizard({
               className={`rounded-[var(--radius-control)] border px-3 py-2 text-left text-xs font-semibold transition ${
                 isActive
                   ? "border-accent bg-accent/15 text-accent"
-                  : isComplete
-                    ? "border-success/30 bg-success/10 text-success"
+                  : isVisited
+                    ? "border-accent/25 bg-accent/5 text-accent/70"
                     : "border-line/70 bg-shell/45 text-milk/46 hover:border-accent/45 hover:text-milk/70"
               }`}
             >
@@ -278,8 +377,8 @@ export function FirstRunWizard({
               </Button>
             ) : null}
             {activeStep === "test" ? (
-              <Button type="button" variant="primary" onClick={onOpenTests}>
-                Run LLM Tests
+              <Button type="button" variant="primary" disabled={running} onClick={() => void runSmokeTest()}>
+                Run smoke test
               </Button>
             ) : null}
             {activeStep === "chat" ? (
@@ -287,9 +386,16 @@ export function FirstRunWizard({
                 Open Chat
               </Button>
             ) : null}
-            <Button type="button" variant="secondary" onClick={() => setActiveStep(steps[Math.min(activeIndex + 1, steps.length - 1)].id)}>
-              Mark step done
-            </Button>
+            {activeStep === "download" ? (
+              <Button type="button" variant="secondary" onClick={() => setActiveStep("add")}>
+                I already downloaded a GGUF
+              </Button>
+            ) : null}
+            {activeStep === "test" ? (
+              <Button type="button" variant="secondary" onClick={onOpenTests}>
+                Open LLM Tests
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -332,7 +438,7 @@ export function FirstRunWizard({
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-milk/38">
-                    {formatActionTime(entry.timestamp)} · confidence: {entry.confidence}
+                    {formatActionTime(entry.timestamp)} - confidence: {entry.confidence}
                   </p>
                   {entry.details.length ? (
                     <ul className="mt-2 space-y-1 text-sm text-milk/52">

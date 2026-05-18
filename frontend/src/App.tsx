@@ -464,9 +464,10 @@ function App() {
           </div>
         ) : null}
 
-        {mode === "control" && !models.length && !firstRunDismissed ? (
+        {mode === "control" && !firstRunDismissed ? (
           <FirstRunWizard
             modelCount={models.length}
+            activeModelId={selectedModelId ?? selectedModel?.id ?? null}
             onAddModel={() => setAddModelOpen(true)}
             onOpenLibrary={() => setMode("library")}
             onOpenTests={() => setMode("tests")}
