@@ -196,6 +196,9 @@ export interface ModelDoctorCheck {
   status: "pass" | "warn" | "fail" | "info";
   detail: string;
   action?: string | null;
+  fix_summary?: string | null;
+  undo_hint?: string | null;
+  confidence?: "low" | "medium" | "high";
 }
 
 export interface ModelDoctorResponse {

@@ -321,6 +321,14 @@ function DoctorCheckRow({ check }: { check: ModelDoctorCheck }) {
       </div>
       <div className="min-w-0">
         <p className="break-words text-milk/68">{check.detail}</p>
+        {check.fix_summary || check.undo_hint ? (
+          <div className="mt-3 rounded-[var(--radius-control)] border border-line/60 bg-shell/45 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Before Quokka fixes this</p>
+            {check.fix_summary ? <p className="mt-2 text-sm text-milk/60">{check.fix_summary}</p> : null}
+            {check.undo_hint ? <p className="mt-2 text-xs text-milk/42">Undo: {check.undo_hint}</p> : null}
+            <p className="mt-2 text-xs text-milk/42">Confidence: {check.confidence ?? "medium"}</p>
+          </div>
+        ) : null}
         {check.action ? <p className="mt-1 text-xs text-accent">{check.action}</p> : null}
       </div>
     </div>

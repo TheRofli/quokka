@@ -124,6 +124,9 @@ class ModelDoctorCheck(BaseModel):
     status: str = Field(pattern="^(pass|warn|fail|info)$")
     detail: str
     action: str | None = None
+    fix_summary: str | None = None
+    undo_hint: str | None = None
+    confidence: str = Field(default="medium", pattern="^(low|medium|high)$")
 
 
 class ModelDoctorResponse(BaseModel):

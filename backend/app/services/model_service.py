@@ -250,8 +250,28 @@ class ModelService:
         checks: list[ModelDoctorCheck] = []
         actions: list[str] = []
 
-        def add_check(check_id: str, label: str, status: str, detail: str, action: str | None = None) -> None:
-            checks.append(ModelDoctorCheck(id=check_id, label=label, status=status, detail=detail, action=action))
+        def add_check(
+            check_id: str,
+            label: str,
+            status: str,
+            detail: str,
+            action: str | None = None,
+            fix_summary: str | None = None,
+            undo_hint: str | None = None,
+            confidence: str = "medium",
+        ) -> None:
+            checks.append(
+                ModelDoctorCheck(
+                    id=check_id,
+                    label=label,
+                    status=status,
+                    detail=detail,
+                    action=action,
+                    fix_summary=fix_summary,
+                    undo_hint=undo_hint,
+                    confidence=confidence,
+                )
+            )
             if action and status in {"warn", "fail"}:
                 actions.append(action)
 
@@ -259,9 +279,27 @@ class ModelService:
             if self._path_exists_for_provider(model.provider, model_path):
                 add_check("model-file", "Model file", "pass", model_path)
             else:
-                add_check("model-file", "Model file", "fail", f"Quokka cannot see {model_path}", "Fix the model path or scan the drive again.")
+                add_check(
+                    "model-file",
+                    "Model file",
+                    "fail",
+                    f"Quokka cannot see {model_path}",
+                    "set_model_path",
+                    fix_summary="Quokka will save the GGUF path you choose and infer the matching Windows or WSL runtime from that path.",
+                    undo_hint="Open Add Model or Health Doctor again and choose the previous GGUF path.",
+                    confidence="medium",
+                )
         else:
-            add_check("model-file", "Model file", "fail", "No model_path is configured.", "Open Add Model and choose a GGUF file.")
+            add_check(
+                "model-file",
+                "Model file",
+                "fail",
+                "No model_path is configured.",
+                "set_model_path",
+                fix_summary="Quokka will save the GGUF path you choose and infer the matching Windows or WSL runtime from that path.",
+                undo_hint="Open Add Model or Health Doctor again and choose a different GGUF path.",
+                confidence="medium",
+            )
 
         if model.provider == ProviderType.WINDOWS_LLAMA_CPP:
             server_path = str(model.metadata.get("llama_server_path", "") or "")
@@ -272,7 +310,10 @@ class ModelService:
                     "llama-server.exe",
                     status,
                     server_path if status == "pass" else f"{server_path} was not found; PATH fallback may still work.",
-                    "Choose llama-server.exe in Add Model or add it to PATH." if status == "warn" else None,
+                    "set_llama_server_path" if status == "warn" else None,
+                    fix_summary="Quokka will save the llama-server.exe path you choose and keep this model on the Windows llama.cpp runtime." if status == "warn" else None,
+                    undo_hint="Choose another llama-server.exe path later or clear the explicit path so Quokka can use PATH." if status == "warn" else None,
+                    confidence="medium",
                 )
             else:
                 add_check("llama-server", "llama-server.exe", "info", "No explicit executable path. Quokka will use PATH.")
@@ -283,7 +324,10 @@ class ModelService:
                     "Runtime",
                     "fail",
                     "This model is configured for WSL but still points to a Windows path.",
-                    "Switch to WSL runtime to convert the path to /mnt/<drive>/...",
+                    "switch_wsl_runtime",
+                    fix_summary="Convert the model path from D:\\... to /mnt/d/... and rebuild the WSL launch command.",
+                    undo_hint="Use Switch to Windows to convert /mnt/d/... back to D:\\...",
+                    confidence="high",
                 )
             else:
                 add_check("runtime", "Runtime", "info", "This model starts through WSL llama.cpp.")
@@ -301,7 +345,16 @@ class ModelService:
             else:
                 add_check("port", "Endpoint port", "info", f"{host}:{port} is closed while the model is {runtime.status.value}.")
         else:
-            add_check("port", "Endpoint port", "fail", f"Could not parse a port from {model.endpoint}.", "Fix the model endpoint.")
+            add_check(
+                "port",
+                "Endpoint port",
+                "fail",
+                f"Could not parse a port from {model.endpoint}.",
+                "change_port",
+                fix_summary="Quokka will replace the endpoint with a valid local port while keeping the current host when possible.",
+                undo_hint="Run Change port again and enter the previous port if you need to restore it.",
+                confidence="medium",
+            )
 
         if runtime.health_ok is True:
             add_check("health", "HTTP health", "pass", f"Ready in {runtime.health_latency_ms or 0:.0f} ms.")
