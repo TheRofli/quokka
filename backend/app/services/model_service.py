@@ -312,7 +312,7 @@ class ModelService:
                     server_path if status == "pass" else f"{server_path} was not found; PATH fallback may still work.",
                     "set_llama_server_path" if status == "warn" else None,
                     fix_summary="Quokka will save the llama-server.exe path you choose and keep this model on the Windows llama.cpp runtime." if status == "warn" else None,
-                    undo_hint="Choose another llama-server.exe path later or clear the explicit path so Quokka can use PATH." if status == "warn" else None,
+                    undo_hint="Choose another llama-server.exe path later or switch this model to WSL if you do not want a Windows executable path." if status == "warn" else None,
                     confidence="medium",
                 )
             else:
